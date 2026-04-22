@@ -55,6 +55,7 @@ interface SupportTicket {
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   createdAt: string;
   category: string;
+  isEscalated?: boolean;
 }
 
 // --- Mock Data ---
@@ -157,6 +158,7 @@ export default function App() {
   const [view, setView] = useState<'DASHBOARD' | 'TICKETS' | 'USERS' | 'REPORTS'>('DASHBOARD');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [isAddingTicket, setIsAddingTicket] = useState(false);
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'alert'} | null>(null);
 
   // Filter States
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
@@ -167,6 +169,21 @@ export default function App() {
   const handleLogin = (role: Role) => {
     const defaultUser = MOCK_USERS.find(u => u.role === role);
     if (defaultUser) setUser(defaultUser);
+    setView('DASHBOARD');
+  };
+
+  const handleEscalate = (id: string) => {
+    setTickets(prev => prev.map(t => 
+      t.id === id ? { ...t, isEscalated: true, priority: (t.priority === 'URGENT' ? 'URGENT' : t.priority === 'HIGH' ? 'URGENT' : 'HIGH') as SupportTicket['priority'] } : t
+    ));
+    if (selectedTicket?.id === id) {
+      setSelectedTicket(prev => prev ? { ...prev, isEscalated: true } : null);
+    }
+    setNotification({ 
+      message: `TICKET ${id} ESCALATED TO MANAGEMENT`, 
+      type: 'alert' 
+    });
+    setTimeout(() => setNotification(null), 5000);
   };
 
   const handleLogout = () => {
@@ -336,6 +353,19 @@ export default function App() {
               <span className="w-2 h-2 rounded-full bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
               CS-302 System Design
             </div>
+            {notification && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className={`ml-4 flex items-center gap-2 px-3 py-1 rounded border text-[9px] font-bold uppercase tracking-wider ${
+                  notification.type === 'alert' ? 'bg-rose-500/20 border-rose-500/50 text-rose-300' : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                }`}
+              >
+                <AlertCircle className="w-3 h-3" />
+                {notification.message}
+              </motion.div>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <div className="relative group">
@@ -620,6 +650,12 @@ export default function App() {
                         </div>
                         
                         <div className="flex items-center gap-6 w-full sm:w-auto justify-between border-t sm:border-t-0 pt-3 sm:pt-0">
+                          {t.isEscalated && (
+                            <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-100 px-2 py-1 rounded-lg">
+                              <AlertCircle className="w-3 h-3 text-rose-500" />
+                              <span className="text-[9px] font-bold text-rose-600 uppercase tracking-tighter">Escalated</span>
+                            </div>
+                          )}
                           <div className="text-right hidden lg:block">
                             <p className="text-[10px] font-bold text-[#1e293b] uppercase tracking-wide">{t.category}</p>
                             <p className="text-[9px] text-[#94a3b8] uppercase font-bold">Category</p>
@@ -633,13 +669,55 @@ export default function App() {
                       </motion.div>
                     ))
                   ) : (
-                    <div className="flex flex-col items-center justify-center p-12 bg-white rounded-xl border border-[#e2e8f0] text-center">
-                      <div className="w-12 h-12 bg-[#f8fafc] rounded-full flex items-center justify-center text-[#94a3b8] mb-4">
-                        <Filter className="w-6 h-6" />
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="flex flex-col items-center justify-center p-16 bg-white rounded-xl border border-[#e2e8f0] text-center shadow-sm"
+                    >
+                      <div className="relative mb-6">
+                        <div className="w-16 h-16 bg-[#f8fafc] rounded-2xl flex items-center justify-center text-[#94a3b8] border border-[#e2e8f0] relative z-10">
+                          <Search className="w-8 h-8 opacity-20 absolute" />
+                          <Filter className="w-7 h-7" />
+                        </div>
+                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 rounded-full flex items-center justify-center text-white border-2 border-white shadow-sm z-20">
+                          <PlusCircle className="w-3 h-3 rotate-45" />
+                        </div>
+                        <div className="absolute inset-0 bg-[#3b82f6]/5 blur-2xl rounded-full scale-150 animate-pulse" />
                       </div>
-                      <h3 className="text-sm font-bold text-[#1e293b]">No tickets match your filters</h3>
-                      <p className="text-[10px] text-[#64748b] mt-1 uppercase font-bold tracking-wider">Try adjusting your selection or clear all filters</p>
-                    </div>
+                      
+                      <h3 className="text-base font-bold text-[#1e293b] mb-2 uppercase tracking-tight">No tickets match your filters</h3>
+                      <p className="text-[11px] text-[#64748b] max-w-[320px] mb-8 font-medium leading-relaxed">
+                        We couldn't find any results for your current selection. 
+                        Try <span className="text-[#3b82f6] font-bold">broadening your search</span> by adjusting the filters above, or <span className="text-[#3b82f6] font-bold">create a new ticket</span> to resolve your issue.
+                        
+                        <span className="block mt-4 font-mono text-[9px] bg-[#f1f5f9] px-2 py-1.5 rounded inline-block border border-[#e2e8f0]">
+                          Active: {[
+                            filterStatus !== 'ALL' && `Status(${filterStatus})`,
+                            filterPriority !== 'ALL' && `Priority(${filterPriority})`,
+                            filterAgent !== 'ALL' && `Agent(${filterAgent})`
+                          ].filter(Boolean).join(' • ') || 'None'}
+                        </span>
+                      </p>
+                      
+                      <div className="flex gap-3">
+                        <button 
+                          onClick={() => {
+                            setFilterStatus('ALL');
+                            setFilterPriority('ALL');
+                            setFilterAgent('ALL');
+                          }}
+                          className="px-6 py-2.5 bg-[#1e293b] text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#0f172a] transition-all shadow-md shadow-[#1e293b]/10 flex items-center gap-2"
+                        >
+                          Reset Filters
+                        </button>
+                        <button 
+                          onClick={() => setIsAddingTicket(true)}
+                          className="px-6 py-2.5 bg-white border border-[#e2e8f0] text-[#64748b] rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#f8fafc] transition-all"
+                        >
+                          New Ticket
+                        </button>
+                      </div>
+                    </motion.div>
                   )}
                 </div>
               </motion.div>
@@ -698,6 +776,11 @@ export default function App() {
                 <div className="flex flex-wrap gap-4 items-center text-[11px] text-[#64748b] font-bold uppercase tracking-wider">
                   <div className="flex items-center gap-2">
                     <StatusBadge status={selectedTicket.status} />
+                    {selectedTicket.isEscalated && (
+                      <span className="bg-rose-500 text-white px-2 py-0.5 rounded text-[8px] flex items-center gap-1 shadow-sm animate-pulse">
+                        <AlertCircle className="w-2.5 h-2.5" /> ESCALATED
+                      </span>
+                    )}
                   </div>
                   <span className="opacity-30">•</span>
                   <div className="flex items-center gap-1.5">
@@ -798,6 +881,14 @@ export default function App() {
                   >
                     Dismiss
                   </button>
+                  {user.role !== 'CUSTOMER' && !selectedTicket.isEscalated && (
+                    <button 
+                      onClick={() => handleEscalate(selectedTicket.id)}
+                      className="px-5 py-2.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-rose-100 transition-all shadow-sm flex items-center gap-2"
+                    >
+                      <TrendingUp className="w-3.5 h-3.5" /> Escalate
+                    </button>
+                  )}
                   {user.role !== 'CUSTOMER' && (
                     <button className="px-5 py-2.5 bg-[#1e293b] text-white rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-[#0f172a] transition-all shadow-sm">
                       Modify Status
