@@ -34,6 +34,7 @@ import { motion, AnimatePresence } from 'motion/react';
 // --- Types ---
 
 type Role = 'CUSTOMER' | 'AGENT' | 'ADMIN';
+type AvailabilityStatus = 'AVAILABLE' | 'ON_BREAK' | 'OFFLINE';
 
 interface User {
   id: string;
@@ -41,6 +42,7 @@ interface User {
   email: string;
   role: Role;
   avatar: string;
+  status: AvailabilityStatus;
 }
 
 interface SupportTicket {
@@ -78,10 +80,10 @@ interface AppNotification {
 // --- Mock Data ---
 
 const MOCK_USERS: User[] = [
-  { id: '1', name: 'Alex Johnson', email: 'alex@example.com', role: 'ADMIN', avatar: 'https://picsum.photos/seed/alex/100/100' },
-  { id: '2', name: 'Sam Rivera', email: 'sam@example.com', role: 'AGENT', avatar: 'https://picsum.photos/seed/sam/100/100' },
-  { id: '3', name: 'Casey Smith', email: 'casey@example.com', role: 'CUSTOMER', avatar: 'https://picsum.photos/seed/casey/100/100' },
-  { id: '4', name: 'Jordan Lee', email: 'jordan@example.com', role: 'AGENT', avatar: 'https://picsum.photos/seed/jordan/100/100' },
+  { id: '1', name: 'Alex Johnson', email: 'alex@example.com', role: 'ADMIN', avatar: 'https://picsum.photos/seed/alex/100/100', status: 'AVAILABLE' },
+  { id: '2', name: 'Sam Rivera', email: 'sam@example.com', role: 'AGENT', avatar: 'https://picsum.photos/seed/sam/100/100', status: 'AVAILABLE' },
+  { id: '3', name: 'Casey Smith', email: 'casey@example.com', role: 'CUSTOMER', avatar: 'https://picsum.photos/seed/casey/100/100', status: 'AVAILABLE' },
+  { id: '4', name: 'Jordan Lee', email: 'jordan@example.com', role: 'AGENT', avatar: 'https://picsum.photos/seed/jordan/100/100', status: 'OFFLINE' },
 ];
 
 const INITIAL_TICKETS: SupportTicket[] = [
@@ -187,6 +189,7 @@ const PriorityIcon = ({ priority }: { priority: SupportTicket['priority'] }) => 
 // --- Main App Component ---
 
 export default function App() {
+  const [allUsers, setAllUsers] = useState<User[]>(MOCK_USERS);
   const [user, setUser] = useState<User | null>(null);
   const [tickets, setTickets] = useState<SupportTicket[]>(INITIAL_TICKETS);
   const [view, setView] = useState<'DASHBOARD' | 'TICKETS' | 'USERS' | 'REPORTS'>('DASHBOARD');
@@ -206,7 +209,7 @@ export default function App() {
 
   // Auth Handling
   const handleLogin = (role: Role) => {
-    const defaultUser = MOCK_USERS.find(u => u.role === role);
+    const defaultUser = allUsers.find(u => u.role === role);
     if (defaultUser) setUser(defaultUser);
     setView('DASHBOARD');
   };
@@ -284,7 +287,7 @@ export default function App() {
   };
 
   const handleAssignAgent = (ticketId: string, agentId: string) => {
-    const agent = MOCK_USERS.find(u => u.id === agentId);
+    const agent = allUsers.find(u => u.id === agentId);
     if (!agent) return;
 
     const timestamp = new Date().toISOString();
@@ -350,6 +353,19 @@ export default function App() {
     }
 
     setNotification({ message: `STATUS UPDATED TO ${newStatus}`, type: 'success' });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const handleUserStatusUpdate = (status: AvailabilityStatus) => {
+    if (!user) return;
+    const updatedUser = { ...user, status };
+    setUser(updatedUser);
+    setAllUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
+    
+    setNotification({ 
+      message: `AVAILABILITY UPDATED TO ${status}`, 
+      type: 'success' 
+    });
     setTimeout(() => setNotification(null), 3000);
   };
 
@@ -536,12 +552,46 @@ export default function App() {
 
           <div className="bg-[#f8fafc] rounded-xl p-3 border border-[#e2e8f0]">
             <div className="flex items-center gap-2 mb-3">
-              <img src={user.avatar} className="w-8 h-8 rounded-lg border border-[#e2e8f0] shadow-sm" alt={user.name} referrerPolicy="no-referrer" />
+              <div className="relative">
+                <img src={user.avatar} className="w-8 h-8 rounded-lg border border-[#e2e8f0] shadow-sm" alt={user.name} referrerPolicy="no-referrer" />
+                <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white shadow-sm ${
+                  user.status === 'AVAILABLE' ? 'bg-emerald-500' :
+                  user.status === 'ON_BREAK' ? 'bg-amber-500' : 'bg-gray-400'
+                }`} />
+              </div>
               <div className="flex-1 overflow-hidden">
                 <p className="text-xs font-bold truncate text-[#0f172a] leading-none mb-1">{user.name}</p>
-                <p className="text-[10px] text-[#64748b] truncate">{user.email}</p>
+                <div className="flex items-center gap-1">
+                  <span className={`w-1 h-1 rounded-full ${
+                    user.status === 'AVAILABLE' ? 'bg-emerald-500' :
+                    user.status === 'ON_BREAK' ? 'bg-amber-500' : 'bg-gray-400'
+                  }`} />
+                  <p className="text-[9px] text-[#64748b] truncate uppercase font-bold tracking-tighter">{user.status.replace('_', ' ')}</p>
+                </div>
               </div>
             </div>
+
+            {user.role === 'AGENT' && (
+              <div className="mb-3 space-y-1">
+                <p className="text-[8px] font-bold text-[#94a3b8] uppercase tracking-widest pl-1 mb-1">Set Availability</p>
+                <div className="grid grid-cols-3 gap-1">
+                  {(['AVAILABLE', 'ON_BREAK', 'OFFLINE'] as AvailabilityStatus[]).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => handleUserStatusUpdate(s)}
+                      className={`py-1 rounded text-[8px] font-bold transition-all border ${
+                        user.status === s 
+                          ? 'bg-[#3b82f6] text-white border-[#3b82f6] shadow-sm' 
+                          : 'bg-white text-[#64748b] border-[#e2e8f0] hover:border-[#cbd5e1]'
+                      }`}
+                    >
+                      {s === 'ON_BREAK' ? 'BREAK' : s.replace('AVAILABLE', 'ONLINE').replace('OFFLINE', 'OFF')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <button 
               onClick={handleLogout}
               className="w-full py-2 text-[#475569] hover:bg-white hover:text-rose-600 rounded-lg transition-all text-[11px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-transparent hover:border-[#e2e8f0]"
@@ -1161,10 +1211,21 @@ export default function App() {
                             <tr key={agent.name} className="hover:bg-[#f8fafc] transition-colors group">
                               <td className="p-4">
                                 <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center text-[#3b82f6] font-bold text-[10px] border border-[#e2e8f0] group-hover:border-[#3b82f6] transition-colors">
-                                    {agent.name.charAt(0)}
+                                  <div className="relative">
+                                    <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center text-[#3b82f6] font-bold text-[10px] border border-[#e2e8f0] group-hover:border-[#3b82f6] transition-colors">
+                                      {agent.name.charAt(0)}
+                                    </div>
+                                    <div className={`absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                                      allUsers.find(u => u.name === agent.name)?.status === 'AVAILABLE' ? 'bg-emerald-500' :
+                                      allUsers.find(u => u.name === agent.name)?.status === 'ON_BREAK' ? 'bg-amber-500' : 'bg-gray-400'
+                                    }`} />
                                   </div>
-                                  <span className="text-xs font-bold text-[#1e293b]">{agent.name}</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs font-bold text-[#1e293b]">{agent.name}</span>
+                                    <span className="text-[9px] text-[#94a3b8] font-bold uppercase tracking-tighter">
+                                      {allUsers.find(u => u.name === agent.name)?.status.replace('_', ' ')}
+                                    </span>
+                                  </div>
                                 </div>
                               </td>
                               <td className="p-4 text-center">
@@ -1346,8 +1407,10 @@ export default function App() {
                               onChange={(e) => handleAssignAgent(selectedTicket.id, e.target.value)}
                             >
                               <option value="" disabled>Select Support Agent...</option>
-                              {MOCK_USERS.filter(u => u.role === 'AGENT').map(agent => (
-                                <option key={agent.id} value={agent.id}>{agent.name} (Support)</option>
+                              {allUsers.filter(u => u.role === 'AGENT').map(agent => (
+                                <option key={agent.id} value={agent.id} className={agent.status !== 'AVAILABLE' ? 'text-[#94a3b8]' : ''}>
+                                  {agent.name} — Status: {agent.status.replace('_', ' ')} {agent.status !== 'AVAILABLE' ? '⚠️' : '✅'}
+                                </option>
                               ))}
                             </select>
                           </div>
