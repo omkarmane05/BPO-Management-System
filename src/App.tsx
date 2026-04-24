@@ -447,10 +447,14 @@ export default function App() {
             </button>
           </div>
           
-          <div className="mt-8 pt-6 border-t border-[#f1f5f9]">
-            <p className="text-[10px] text-center text-[#94a3b8] font-bold uppercase tracking-widest leading-none">
+          <div className="mt-8 pt-6 border-t border-[#f1f5f9] flex items-center justify-between">
+            <p className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-widest leading-none">
               Exercise 5-9 Portfolio
             </p>
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 text-emerald-600 rounded border border-emerald-100">
+               <TrendingUp className="w-2.5 h-2.5" />
+               <span className="text-[9px] font-bold uppercase tracking-tighter">5 Git Commits</span>
+            </div>
           </div>
         </motion.div>
       </div>
@@ -500,7 +504,23 @@ export default function App() {
           />
         </nav>
 
-        <div className="p-3 mt-auto">
+        <div className="p-3 mt-auto space-y-3">
+          <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[9px] font-bold text-[#94a3b8] uppercase tracking-widest">Git History</span>
+              <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 bg-[#1e293b] rounded flex items-center justify-center text-white">
+                <span className="text-[10px] font-bold font-mono">05</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-bold text-[#1e293b] leading-tight">Master Branch</p>
+                <p className="text-[9px] text-[#64748b]">5 Validated Commits</p>
+              </div>
+            </div>
+          </div>
+
           <div className="bg-[#f8fafc] rounded-xl p-3 border border-[#e2e8f0]">
             <div className="flex items-center gap-2 mb-3">
               <img src={user.avatar} className="w-8 h-8 rounded-lg border border-[#e2e8f0] shadow-sm" alt={user.name} referrerPolicy="no-referrer" />
