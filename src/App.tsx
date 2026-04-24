@@ -199,6 +199,7 @@ export default function App() {
   const [escalationReasonInput, setEscalationReasonInput] = useState('');
 
   // Filter States
+  const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPriority, setFilterPriority] = useState<string>('ALL');
   const [filterAgent, setFilterAgent] = useState<string>('ALL');
@@ -406,9 +407,21 @@ export default function App() {
       const matchStatus = filterStatus === 'ALL' || t.status === filterStatus;
       const matchPriority = filterPriority === 'ALL' || t.priority === filterPriority;
       const matchAgent = filterAgent === 'ALL' || t.agentName === filterAgent;
-      return matchStatus && matchPriority && matchAgent;
+      
+      const searchLower = searchQuery.toLowerCase();
+      const matchSearch = searchQuery === '' || 
+        t.id.toLowerCase().includes(searchLower) ||
+        t.subject.toLowerCase().includes(searchLower) ||
+        t.description.toLowerCase().includes(searchLower);
+
+      return matchStatus && matchPriority && matchAgent && matchSearch;
     });
-  }, [tickets, filterStatus, filterPriority, filterAgent]);
+  }, [tickets, filterStatus, filterPriority, filterAgent, searchQuery]);
+
+  const recentActivity = useMemo(() => {
+    const allEvents = tickets.flatMap(t => t.history.map(h => ({ ...h, ticketId: t.id, ticketSubject: t.subject })));
+    return allEvents.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 5);
+  }, [tickets]);
 
   if (!user) {
     return (
@@ -662,10 +675,46 @@ export default function App() {
               >
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <StatCard label="Tickets" value={stats.total} icon={<Ticket className="w-4 h-4 text-[#3b82f6]" />} />
-                  <StatCard label="Resolved" value={stats.resolved} icon={<CheckCircle2 className="w-4 h-4 text-[#10b981]" />} />
-                  <StatCard label="In Progress" value={stats.pending} icon={<Clock className="w-4 h-4 text-[#f59e0b]" />} />
-                  <StatCard label="Critical" value={stats.urgent} icon={<AlertCircle className="w-4 h-4 text-[#ef4444]" />} />
+                  <StatCard 
+                    label="Tickets" 
+                    value={stats.total} 
+                    icon={<Ticket className="w-4 h-4 text-[#3b82f6]" />} 
+                    onClick={() => {
+                      setFilterStatus('ALL');
+                      setFilterPriority('ALL');
+                      setView('TICKETS');
+                    }}
+                  />
+                  <StatCard 
+                    label="Resolved" 
+                    value={stats.resolved} 
+                    icon={<CheckCircle2 className="w-4 h-4 text-[#10b981]" />} 
+                    onClick={() => {
+                      setFilterStatus('RESOLVED');
+                      setFilterPriority('ALL');
+                      setView('TICKETS');
+                    }}
+                  />
+                  <StatCard 
+                    label="In Progress" 
+                    value={stats.pending} 
+                    icon={<Clock className="w-4 h-4 text-[#f59e0b]" />} 
+                    onClick={() => {
+                      setFilterStatus('IN_PROGRESS');
+                      setFilterPriority('ALL');
+                      setView('TICKETS');
+                    }}
+                  />
+                  <StatCard 
+                    label="Critical" 
+                    value={stats.urgent} 
+                    icon={<AlertCircle className="w-4 h-4 text-[#ef4444]" />} 
+                    onClick={() => {
+                      setFilterStatus('ALL');
+                      setFilterPriority('URGENT');
+                      setView('TICKETS');
+                    }}
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -709,7 +758,7 @@ export default function App() {
                         <h3 className="card-label">Exercise 5: Operations</h3>
                         <h3 className="text-sm font-bold text-[#0f172a]">Primary Actors & Tasks</h3>
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-3 gap-3 mb-6">
                         <div className="border-[1.5px] border-dashed border-[#cbd5e1] rounded-lg p-3 bg-[#f8fafc] text-center">
                           <p className="text-[11px] font-bold text-[#1e293b] mb-1">Customer</p>
                           <p className="text-[10px] text-[#64748b]">Raise & Track Tickets</p>
@@ -721,6 +770,34 @@ export default function App() {
                         <div className="border-[1.5px] border-dashed border-[#cbd5e1] rounded-lg p-3 bg-[#f8fafc] text-center">
                           <p className="text-[11px] font-bold text-[#1e293b] mb-1">Admin</p>
                           <p className="text-[10px] text-[#64748b]">Manage Staff & Logic</p>
+                        </div>
+                      </div>
+
+                      <div className="pt-6 border-t border-[#f1f5f9]">
+                        <h3 className="card-label mb-4">Live System Audit</h3>
+                        <div className="space-y-4">
+                          {recentActivity.map(event => (
+                            <div key={event.id} className="flex items-start gap-3 group">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border border-transparent group-hover:border-[#e2e8f0] transition-all bg-opacity-10 ${
+                                event.type === 'creation' ? 'bg-blue-500 text-blue-600' :
+                                event.type === 'status' ? 'bg-amber-500 text-amber-600' :
+                                event.type === 'assignment' ? 'bg-purple-500 text-purple-600' : 'bg-rose-500 text-rose-600'
+                              }`}>
+                                {event.type === 'creation' ? <PlusCircle className="w-4 h-4" /> :
+                                 event.type === 'status' ? <CheckCircle2 className="w-4 h-4" /> :
+                                 event.type === 'assignment' ? <UserCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <p className="text-[11px] font-bold text-[#1e293b] truncate uppercase tracking-tight">{event.action}</p>
+                                  <span className="text-[9px] text-[#94a3b8] font-mono">{new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                </div>
+                                <p className="text-[10px] text-[#64748b] truncate">
+                                  <span className="font-bold text-[#3b82f6]">{event.ticketId}</span> • {event.user}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -828,10 +905,18 @@ export default function App() {
               >
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#e2e8f0] shadow-sm">
                    <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg">
-                      <Filter className="w-3.5 h-3.5 text-[#64748b]" />
-                      <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Filters</span>
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                      <input 
+                        type="text"
+                        placeholder="Search tickets..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="bg-[#f8fafc] border border-[#e2e8f0] rounded-lg pl-9 pr-4 py-1.5 text-[11px] font-bold text-[#1e293b] outline-none focus:ring-1 focus:ring-[#3b82f6] w-48 placeholder-[#94a3b8] uppercase tracking-wider"
+                      />
                     </div>
+
+                    <div className="w-px h-6 bg-[#e2e8f0] hidden lg:block mx-1" />
 
                     <div className="flex items-center gap-2">
                       <select 
@@ -915,13 +1000,38 @@ export default function App() {
                           </div>
                         </div>
                         
-                        <div className="flex items-center gap-6 w-full sm:w-auto justify-between border-t sm:border-t-0 pt-3 sm:pt-0">
-                          {t.isEscalated && (
-                            <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-100 px-2 py-1 rounded-lg">
-                              <AlertCircle className="w-3 h-3 text-rose-500" />
-                              <span className="text-[9px] font-bold text-rose-600 uppercase tracking-tighter">Escalated</span>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-6 w-full sm:w-auto justify-between border-t sm:border-t-0 pt-3 sm:pt-0">
+                            {user.role !== 'CUSTOMER' && (
+                              <div className="flex items-center gap-1.5 p-1 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleStatusChange(t.id, 'IN_PROGRESS'); }}
+                                  title="Mark In Progress"
+                                  className={`w-6 h-6 rounded-md flex items-center justify-center transition-all ${t.status === 'IN_PROGRESS' ? 'bg-amber-500 text-white shadow-sm' : 'text-[#94a3b8] hover:bg-white hover:text-amber-500'}`}
+                                >
+                                  <Clock className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleStatusChange(t.id, 'RESOLVED'); }}
+                                  title="Mark Resolved"
+                                  className={`w-6 h-6 rounded-md flex items-center justify-center transition-all ${t.status === 'RESOLVED' ? 'bg-emerald-500 text-white shadow-sm' : 'text-[#94a3b8] hover:bg-white hover:text-emerald-500'}`}
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleStatusChange(t.id, 'ON_HOLD'); }}
+                                  title="Mark On Hold"
+                                  className={`w-6 h-6 rounded-md flex items-center justify-center transition-all ${t.status === 'ON_HOLD' ? 'bg-gray-500 text-white shadow-sm' : 'text-[#94a3b8] hover:bg-white hover:text-gray-500'}`}
+                                >
+                                  <Filter className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                            {t.isEscalated && (
+                              <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-100 px-2 py-1 rounded-lg">
+                                <AlertCircle className="w-3 h-3 text-rose-500" />
+                                <span className="text-[9px] font-bold text-rose-600 uppercase tracking-tighter">Escalated</span>
+                              </div>
+                            )}
                           <div className="text-right hidden lg:block">
                             <p className="text-[10px] font-bold text-[#1e293b] uppercase tracking-wide">{t.category}</p>
                             <p className="text-[9px] text-[#94a3b8] uppercase font-bold">Category</p>
@@ -1325,6 +1435,22 @@ export default function App() {
                       </div>
                     </div>
                   )}
+                  {user.role === 'CUSTOMER' && selectedTicket.status === 'RESOLVED' && (
+                    <div className="flex gap-2">
+                       <button 
+                        onClick={() => handleStatusChange(selectedTicket.id, 'CLOSED')}
+                        className="px-5 py-2.5 bg-[#10b981] text-white rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-[#059669] transition-all shadow-sm flex items-center gap-2"
+                      >
+                        <CheckCircle2 className="w-4 h-4" /> Accept Resolution
+                      </button>
+                      <button 
+                        onClick={() => handleStatusChange(selectedTicket.id, 'IN_PROGRESS')}
+                        className="px-5 py-2.5 bg-white border border-amber-200 text-amber-600 rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-amber-50 transition-all shadow-sm flex items-center gap-2"
+                      >
+                        <LogOut className="w-4 h-4 rotate-90" /> Reopen Ticket
+                      </button>
+                    </div>
+                  )}
                   <button 
                     className="px-5 py-2.5 bg-white border border-[#e2e8f0] rounded-lg text-[11px] font-bold uppercase tracking-wider text-[#475569] hover:bg-[#f1f5f9] transition-all shadow-sm"
                     onClick={() => setSelectedTicket(null)}
@@ -1504,9 +1630,12 @@ function MenuButton({ active, icon, label, onClick }: { active: boolean, icon: R
   );
 }
 
-function StatCard({ label, value, icon, color = 'blue' }: { label: string, value: number, icon: React.ReactNode, color?: 'blue' | 'emerald' | 'amber' | 'rose' }) {
+function StatCard({ label, value, icon, color = 'blue', onClick }: { label: string, value: number, icon: React.ReactNode, color?: 'blue' | 'emerald' | 'amber' | 'rose', onClick?: () => void }) {
   return (
-    <div className="bg-white p-5 rounded-xl border border-[#e2e8f0] shadow-sm hover:border-[#3b82f6] transition-all group overflow-hidden relative">
+    <div 
+      onClick={onClick}
+      className={`bg-white p-5 rounded-xl border border-[#e2e8f0] shadow-sm hover:border-[#3b82f6] transition-all group overflow-hidden relative ${onClick ? 'cursor-pointer' : ''}`}
+    >
       <div className="flex items-center justify-between mb-4 relative z-10">
         <div className="p-2 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg group-hover:bg-white group-hover:border-[#3b82f6] transition-all">
           {icon}
