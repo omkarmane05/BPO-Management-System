@@ -192,7 +192,7 @@ export default function App() {
   const [allUsers, setAllUsers] = useState<User[]>(MOCK_USERS);
   const [user, setUser] = useState<User | null>(null);
   const [tickets, setTickets] = useState<SupportTicket[]>(INITIAL_TICKETS);
-  const [view, setView] = useState<'DASHBOARD' | 'TICKETS' | 'USERS' | 'REPORTS'>('DASHBOARD');
+  const [view, setView] = useState<'DASHBOARD' | 'TICKETS' | 'USERS' | 'REPORTS' | 'ADMIN_DASHBOARD'>('DASHBOARD');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [isAddingTicket, setIsAddingTicket] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'alert'} | null>(null);
@@ -211,7 +211,11 @@ export default function App() {
   const handleLogin = (role: Role) => {
     const defaultUser = allUsers.find(u => u.role === role);
     if (defaultUser) setUser(defaultUser);
-    setView('DASHBOARD');
+    if (role === 'ADMIN') {
+      setView('ADMIN_DASHBOARD');
+    } else {
+      setView('DASHBOARD');
+    }
   };
 
   const handleCreateTicket = (subject: string, category: string, priority: SupportTicket['priority'], description: string) => {
@@ -505,12 +509,22 @@ export default function App() {
         </div>
 
         <nav className="flex-1 px-3 space-y-1 mt-2">
-          <MenuButton 
-            active={view === 'DASHBOARD'} 
-            onClick={() => setView('DASHBOARD')}
-            icon={<LayoutDashboard className="w-4 h-4" />}
-            label="Overview"
-          />
+          {user.role === 'ADMIN' ? (
+            <MenuButton 
+              active={view === 'ADMIN_DASHBOARD'} 
+              onClick={() => setView('ADMIN_DASHBOARD')}
+              icon={<LayoutDashboard className="w-4 h-4" />}
+              label="Admin Dashboard"
+            />
+          ) : (
+            <MenuButton 
+              active={view === 'DASHBOARD'} 
+              onClick={() => setView('DASHBOARD')}
+              icon={<LayoutDashboard className="w-4 h-4" />}
+              label="Overview"
+            />
+          )}
+          
           <MenuButton 
             active={view === 'TICKETS'} 
             onClick={() => setView('TICKETS')}
@@ -522,7 +536,7 @@ export default function App() {
               active={view === 'USERS'} 
               onClick={() => setView('USERS')}
               icon={<Users className="w-4 h-4" />}
-              label="Staff"
+              label="Staff Management"
             />
           )}
           <MenuButton 
@@ -715,6 +729,16 @@ export default function App() {
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-6">
           <AnimatePresence mode="wait">
+            {view === 'ADMIN_DASHBOARD' && user.role === 'ADMIN' && (
+              <AdminDashboardView 
+                stats={stats} 
+                statusData={statusData} 
+                chartData={chartData} 
+                agentPerformanceData={agentPerformanceData}
+                allUsers={allUsers}
+                tickets={tickets}
+              />
+            )}
             {view === 'DASHBOARD' && (
               <motion.div 
                 key="dashboard"
@@ -1264,15 +1288,64 @@ export default function App() {
             )}
 
             {view === 'USERS' && (
-              <div className="flex flex-col items-center justify-center p-12 bg-white rounded-xl border-[1.5px] border-dashed border-[#cbd5e1]">
-                <div className="w-16 h-16 bg-[#f8fafc] rounded-2xl flex items-center justify-center text-[#94a3b8] mb-4 border border-[#e2e8f0]">
-                  <Users className="w-8 h-8" />
+              <motion.div 
+                key="users"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="card-label">Staff Management</h3>
+                      <h3 className="text-sm font-bold text-[#0f172a]">Active Support Team</h3>
+                    </div>
+                    <button className="px-4 py-2 bg-[#3b82f6] text-white rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-[#2563eb] transition-all flex items-center gap-2">
+                      <PlusCircle className="w-3.5 h-3.5" /> Add Agent
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {allUsers.filter(u => u.role !== 'CUSTOMER').map(u => (
+                      <div key={u.id} className="p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] relative group">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <img src={u.avatar} className="w-12 h-12 rounded-xl shadow-sm border border-white" alt={u.name} />
+                            <div className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm ${
+                              u.status === 'AVAILABLE' ? 'bg-emerald-500' :
+                              u.status === 'ON_BREAK' ? 'bg-amber-500' : 'bg-gray-400'
+                            }`} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-[#0f172a]">{u.name}</p>
+                            <p className="text-[10px] text-[#64748b] font-medium mb-1">{u.role}</p>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full ${
+                                u.status === 'AVAILABLE' ? 'bg-emerald-500' :
+                                u.status === 'ON_BREAK' ? 'bg-amber-500' : 'bg-gray-400'
+                              }`} />
+                              <span className="text-[9px] font-bold text-[#64748b] uppercase tracking-tighter">{u.status.replace('_', ' ')}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-[#e2e8f0] flex items-center justify-between">
+                          <div className="text-center">
+                            <p className="text-[10px] font-bold text-[#1e293b]">{tickets.filter(t => t.agentId === u.id && t.status !== 'RESOLVED' && t.status !== 'CLOSED').length}</p>
+                            <p className="text-[8px] text-[#94a3b8] font-bold uppercase">Active</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-[10px] font-bold text-[#1e293b]">{tickets.filter(t => t.agentId === u.id && (t.status === 'RESOLVED' || t.status === 'CLOSED')).length}</p>
+                            <p className="text-[8px] text-[#94a3b8] font-bold uppercase">Done</p>
+                          </div>
+                          <button className="px-3 py-1.5 bg-white border border-[#e2e8f0] text-[#64748b] rounded-lg text-[9px] font-bold uppercase hover:bg-white hover:text-[#3b82f6] hover:border-[#3b82f6] transition-all">
+                            Details
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <h3 className="text-base font-bold text-[#1e293b] uppercase tracking-wider mb-2">USERS Section</h3>
-                <p className="text-[#64748b] text-[11px] text-center max-w-sm font-medium">
-                  This module is documented in the Exercise portfolio and scheduled for full production deployment in the next sprint.
-                </p>
-              </div>
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
@@ -1693,7 +1766,7 @@ function MenuButton({ active, icon, label, onClick }: { active: boolean, icon: R
   );
 }
 
-function StatCard({ label, value, icon, color = 'blue', onClick }: { label: string, value: number, icon: React.ReactNode, color?: 'blue' | 'emerald' | 'amber' | 'rose', onClick?: () => void }) {
+function StatCard({ label, value, icon, color = 'blue', onClick }: { label: string, value: string | number, icon: React.ReactNode, color?: 'blue' | 'emerald' | 'amber' | 'rose', onClick?: () => void }) {
   return (
     <div 
       onClick={onClick}
@@ -1713,3 +1786,160 @@ function StatCard({ label, value, icon, color = 'blue', onClick }: { label: stri
     </div>
   );
 }
+
+function StatusIndicator({ status }: { status: AvailabilityStatus }) {
+  const statusColors: Record<AvailabilityStatus, string> = {
+    AVAILABLE: 'bg-emerald-500',
+    ON_BREAK: 'bg-amber-500',
+    OFFLINE: 'bg-gray-400',
+  };
+
+  return (
+    <div className={`w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${statusColors[status]}`} />
+  );
+}
+
+function AdminDashboardView({ stats, statusData, chartData, agentPerformanceData, allUsers, tickets }: { 
+  stats: any, 
+  statusData: any, 
+  chartData: any, 
+  agentPerformanceData: any,
+  allUsers: User[],
+  tickets: SupportTicket[]
+}) {
+  const activeAgents = allUsers.filter(u => u.role === 'AGENT');
+  
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="space-y-6"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-[#0f172a]">Command Center</h2>
+          <p className="text-[11px] text-[#64748b] font-medium uppercase tracking-wider">Operational KPI & Staffing Overview</p>
+        </div>
+        <div className="flex gap-2">
+           <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-tight">{activeAgents.filter(a => a.status === 'AVAILABLE').length} Agents Online</span>
+           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Total Lifecycle" value={stats.total} icon={<Ticket className="w-4 h-4 text-[#3b82f6]" />} />
+        <StatCard label="Resolution Rate" value={`${Math.round((stats.resolved/(stats.total || 1))*100)}%`} icon={<CheckCircle2 className="w-4 h-4 text-[#10b981]" />} />
+        <StatCard label="Active Backlog" value={stats.pending} icon={<Clock className="w-4 h-4 text-[#f59e0b]" />} />
+        <StatCard label="Critical Breach" value={stats.urgent} icon={<AlertCircle className="w-4 h-4 text-[#ef4444]" />} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-8 space-y-6">
+          <div className="bg-white p-6 rounded-xl border border-[#e2e8f0] shadow-sm">
+            <h3 className="card-label mb-4">Agent Workload & Availability Status</h3>
+            <div className="space-y-3">
+              {activeAgents.map(agent => {
+                const agentTickets = tickets.filter(t => t.agentId === agent.id && t.status !== 'RESOLVED' && t.status !== 'CLOSED');
+                const loadPercent = Math.min((agentTickets.length / 5) * 100, 100);
+                
+                return (
+                  <div key={agent.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] gap-4">
+                    <div className="flex items-center gap-3 min-w-[180px]">
+                      <div className="relative">
+                        <img src={agent.avatar} className="w-10 h-10 rounded-lg border border-white shadow-sm" alt={agent.name} />
+                        <div className="absolute -bottom-1 -right-1">
+                          <StatusIndicator status={agent.status} />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-[#1e293b]">{agent.name}</p>
+                        <p className={`text-[9px] font-bold uppercase tracking-tighter ${
+                          agent.status === 'AVAILABLE' ? 'text-emerald-600' :
+                          agent.status === 'ON_BREAK' ? 'text-amber-600' : 'text-gray-400'
+                        }`}>{agent.status.replace('_', ' ')}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex-1 flex items-center gap-4">
+                      <div className="flex-1">
+                        <div className="flex justify-between mb-1 text-[9px] font-bold uppercase text-[#64748b]">
+                          <span>Current Workload</span>
+                          <span className={agentTickets.length > 4 ? 'text-rose-500' : 'text-[#3b82f6]'}>{agentTickets.length} / 5 Cap</span>
+                        </div>
+                        <div className="w-full h-2 bg-[#e2e8f0] rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full transition-all duration-700 ${
+                              loadPercent > 80 ? 'bg-rose-500' : loadPercent > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${loadPercent}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="text-right min-w-[60px]">
+                        <p className="text-xs font-bold text-[#1e293b]">{agentPerformanceData.find((d: any) => d.name === agent.name)?.avgTime || '0.0h'}</p>
+                        <p className="text-[8px] text-[#94a3b8] font-bold uppercase">Avg Handle</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-4 space-y-6">
+          <div className="bg-white p-6 rounded-xl border border-[#e2e8f0] shadow-sm">
+            <h3 className="card-label mb-4">Volume by Class</h3>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={40}
+                    outerRadius={60}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {chartData.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'][index % 4]} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2 mt-4">
+              {chartData.map((item: any, i: number) => (
+                <div key={item.name} className="flex items-center justify-between text-[10px]">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'][i % 4] }} />
+                    <span className="text-[#64748b] font-bold">{item.name}</span>
+                  </div>
+                  <span className="font-bold text-[#1e293b]">{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-[#1e293b] p-6 rounded-xl border border-[#0f172a] shadow-lg text-white">
+            <div className="flex items-center gap-3 mb-4">
+               <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center border border-blue-500/30">
+                  <TrendingUp className="w-5 h-5 text-blue-400" />
+               </div>
+               <div>
+                  <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest leading-none mb-1">Efficiency Factor</p>
+                  <p className="text-lg font-bold">94.2%</p>
+               </div>
+            </div>
+            <p className="text-[10px] text-blue-100/60 leading-relaxed">System-wide performance is within nominal parameters. Response times are stable.</p>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
