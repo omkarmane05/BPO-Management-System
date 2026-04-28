@@ -27,7 +27,8 @@ import {
   ChevronRight,
   TrendingUp,
   Settings as SettingsIcon,
-  Bell
+  Bell,
+  Star
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -59,6 +60,8 @@ interface SupportTicket {
   category: string;
   isEscalated?: boolean;
   escalationReason?: string;
+  rating?: number;
+  feedback?: string;
   history: {
     id: string;
     action: string;
@@ -370,6 +373,28 @@ export default function App() {
       message: `AVAILABILITY UPDATED TO ${status}`, 
       type: 'success' 
     });
+    setTimeout(() => setNotification(null), 3000);
+  };
+  
+  const handleRateTicket = (ticketId: string, rating: number, feedback: string) => {
+    const timestamp = new Date().toISOString();
+    const historyEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      action: `Customer rated ticket: ${rating} Stars`,
+      user: user?.name || 'Customer',
+      timestamp,
+      type: 'status' as const
+    };
+
+    setTickets(prev => prev.map(t => 
+      t.id === ticketId ? { ...t, rating, feedback, history: [...t.history, historyEntry] } : t
+    ));
+
+    if (selectedTicket?.id === ticketId) {
+      setSelectedTicket(prev => prev ? { ...prev, rating, feedback, history: [...prev.history, historyEntry] } : null);
+    }
+
+    setNotification({ message: 'THANK YOU FOR YOUR FEEDBACK', type: 'success' });
     setTimeout(() => setNotification(null), 3000);
   };
 
@@ -1431,6 +1456,49 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Rating & Feedback Section */}
+                {(selectedTicket.status === 'RESOLVED' || selectedTicket.status === 'CLOSED') && (
+                  <div className="bg-white border border-[#e2e8f0] rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-[#f8fafc] px-6 py-3 border-b border-[#e2e8f0] flex items-center justify-between">
+                      <h4 className="text-[10px] font-bold text-[#1e293b] uppercase tracking-widest flex items-center gap-2">
+                        <Star className="w-3.5 h-3.5 text-amber-500" /> Service Experience Resolution
+                      </h4>
+                      {selectedTicket.rating && (
+                        <div className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold uppercase tracking-tighter">
+                          Feedback Recorded
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-6">
+                      {selectedTicket.rating ? (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star 
+                                key={star} 
+                                className={`w-4 h-4 ${star <= selectedTicket.rating! ? 'text-amber-500 fill-amber-500' : 'text-[#e2e8f0]'}`} 
+                              />
+                            ))}
+                          </div>
+                          <div className="bg-[#f1f5f9] p-4 rounded-lg italic text-xs text-[#475569]">
+                            "{selectedTicket.feedback || 'No comments provided.'}"
+                          </div>
+                        </div>
+                      ) : (
+                        user.role === 'CUSTOMER' ? (
+                          <FeedbackForm 
+                            onSubmit={(rating, feedback) => handleRateTicket(selectedTicket.id, rating, feedback)} 
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center py-6 text-[11px] text-[#94a3b8] font-medium italic">
+                            Waiting for customer evaluation...
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                   <div className="space-y-4">
                     <div>
@@ -1594,39 +1662,12 @@ export default function App() {
                     Dismiss
                   </button>
                   {user.role !== 'CUSTOMER' && !selectedTicket.isEscalated && (
-                    <div className="flex gap-2">
-                       {escalationPrompt === selectedTicket.id ? (
-                         <div className="flex gap-2 items-center bg-white border border-[#e2e8f0] p-1 rounded-lg">
-                           <input 
-                            autoFocus
-                            value={escalationReasonInput}
-                            onChange={(e) => setEscalationReasonInput(e.target.value)}
-                            placeholder="Reason for escalation..."
-                            className="bg-transparent text-[10px] px-2 outline-none w-48 text-[#1e293b]"
-                           />
-                           <button 
-                            disabled={!escalationReasonInput.trim()}
-                            onClick={() => handleEscalate(selectedTicket.id, escalationReasonInput)}
-                            className="px-3 py-1.5 bg-rose-500 text-white rounded text-[9px] font-bold uppercase transition-colors disabled:opacity-50"
-                           >
-                            Confirm
-                           </button>
-                           <button 
-                            onClick={() => setEscalationPrompt(null)}
-                            className="px-3 py-1.5 bg-[#f1f5f9] text-[#64748b] rounded text-[9px] font-bold uppercase"
-                           >
-                            Cancel
-                           </button>
-                         </div>
-                       ) : (
-                        <button 
-                          onClick={() => setEscalationPrompt(selectedTicket.id)}
-                          className="px-5 py-2.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-rose-100 transition-all shadow-sm flex items-center gap-2"
-                        >
-                          <TrendingUp className="w-3.5 h-3.5" /> Escalate
-                        </button>
-                       )}
-                    </div>
+                    <button 
+                      onClick={() => setEscalationPrompt(selectedTicket.id)}
+                      className="px-5 py-2.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-rose-100 transition-all shadow-sm flex items-center gap-2"
+                    >
+                      <TrendingUp className="w-3.5 h-3.5" /> Escalate
+                    </button>
                   )}
                   {user.role !== 'CUSTOMER' && (
                     <button className="px-5 py-2.5 bg-[#1e293b] text-white rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-[#0f172a] transition-all shadow-sm">
@@ -1654,6 +1695,73 @@ export default function App() {
               onClose={() => setIsAddingTicket(false)}
               onSubmit={handleCreateTicket}
             />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Escalation Modal */}
+      <AnimatePresence>
+        {escalationPrompt && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
+            onClick={() => setEscalationPrompt(null)}
+          >
+            <motion.div 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              className="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden p-8 border border-[#e2e8f0]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-rose-50 text-rose-500 rounded-lg flex items-center justify-center border border-rose-100 shadow-sm">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-[#0f172a]">Escalate Ticket</h2>
+                  <p className="text-[10px] text-[#64748b] font-bold uppercase tracking-widest">Management Intervention Required</p>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest block mb-2 px-1">Reason for Escalation (Mandatory)</label>
+                  <textarea 
+                    autoFocus
+                    rows={4}
+                    value={escalationReasonInput}
+                    onChange={(e) => setEscalationReasonInput(e.target.value)}
+                    placeholder="Provide a specific justification for management review..."
+                    className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-4 text-xs outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-[#1e293b] placeholder-[#94a3b8] resize-none"
+                  />
+                  <p className="mt-2 text-[9px] text-[#94a3b8] font-medium leading-relaxed">
+                    Escalating a ticket will automatically bump the priority to URGENT and notify the administrative team for immediate attention.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button 
+                    onClick={() => {
+                      setEscalationPrompt(null);
+                      setEscalationReasonInput('');
+                    }}
+                    className="flex-1 py-3 bg-white border border-[#e2e8f0] text-[#64748b] rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#f8fafc] transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    disabled={!escalationReasonInput.trim()}
+                    onClick={() => handleEscalate(escalationPrompt, escalationReasonInput)}
+                    className="flex-1 py-3 bg-rose-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-rose-600 transition-all shadow-sm disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    Confirm Escalation
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1744,6 +1852,56 @@ function ModalContent({ onClose, onSubmit }: { onClose: () => void, onSubmit: (s
         </div>
       </div>
     </motion.div>
+  );
+}
+
+function FeedbackForm({ onSubmit }: { onSubmit: (rating: number, feedback: string) => void }) {
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [feedback, setFeedback] = useState('');
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <p className="text-[11px] font-bold text-[#1e293b] uppercase tracking-wider">How was your support experience?</p>
+        <div className="flex items-center gap-2">
+          {[1, 2, 3, 4, 5].map((star) => (
+            <button 
+              key={star}
+              onMouseEnter={() => setHoverRating(star)}
+              onMouseLeave={() => setHoverRating(0)}
+              onClick={() => setRating(star)}
+              className="p-1 hover:scale-110 transition-transform"
+            >
+              <Star 
+                className={`w-6 h-6 transition-colors ${
+                  star <= (hoverRating || rating) ? 'text-amber-500 fill-amber-500' : 'text-[#e2e8f0]'
+                }`} 
+              />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest">Resolution Comments</label>
+        <textarea 
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          placeholder="What did we do well? What could we improve?"
+          rows={3}
+          className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs outline-none focus:ring-1 focus:ring-[#3b82f6] text-[#1e293b] placeholder-[#94a3b8] resize-none"
+        />
+      </div>
+
+      <button 
+        disabled={!rating}
+        onClick={() => onSubmit(rating, feedback)}
+        className="w-full py-2.5 bg-[#1e293b] text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#0f172a] transition-all shadow-sm disabled:opacity-30 flex items-center justify-center gap-2"
+      >
+        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Submit Evaluation
+      </button>
+    </div>
   );
 }
 
