@@ -37,6 +37,16 @@ import { motion, AnimatePresence } from 'motion/react';
 type Role = 'CUSTOMER' | 'AGENT' | 'ADMIN';
 type AvailabilityStatus = 'AVAILABLE' | 'ON_BREAK' | 'OFFLINE';
 
+interface EmailLog {
+  id: string;
+  recipient: string;
+  subject: string;
+  body: string;
+  timestamp: string;
+  type: 'TICKET_CREATED' | 'TICKET_ASSIGNED' | 'TICKET_RESOLVED' | 'STATUS_UPDATE' | 'ESCALATION';
+  ticketId: string;
+}
+
 interface User {
   id: string;
   name: string;
@@ -200,6 +210,7 @@ export default function App() {
   const [isAddingTicket, setIsAddingTicket] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'alert'} | null>(null);
   const [allNotifications, setAllNotifications] = useState<AppNotification[]>([]);
+  const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [escalationPrompt, setEscalationPrompt] = useState<string | null>(null);
   const [escalationReasonInput, setEscalationReasonInput] = useState('');
@@ -240,7 +251,28 @@ export default function App() {
 
     setTickets([newTicket, ...tickets]);
     setIsAddingTicket(false);
-    setNotification({ message: 'TICKET CREATED SUCCESSFULLY', type: 'success' });
+
+    // Email Notifications
+    sendSimulatedEmail({
+      recipient: user?.email || 'customer@example.com',
+      subject: `Ticket Received: ${subject}`,
+      body: `Hello ${user?.name || 'Customer'},\n\nWe have received your ticket "${subject}". Our team will review it shortly.\n\nTicket ID: ${newTicket.id}`,
+      type: 'TICKET_CREATED',
+      ticketId: newTicket.id
+    });
+
+    const admin = allUsers.find(u => u.role === 'ADMIN');
+    if (admin) {
+      sendSimulatedEmail({
+        recipient: admin.email,
+        subject: `ACTION REQUIRED: New Ticket ${newTicket.id}`,
+        body: `A new ticket has been created by ${user?.name}.\n\nSubject: ${subject}\nPriority: ${priority}`,
+        type: 'TICKET_CREATED',
+        ticketId: newTicket.id
+      });
+    }
+
+    setNotification({ message: 'TICKET CREATED & NOTIFICATIONS SENT', type: 'success' });
     setTimeout(() => setNotification(null), 3000);
   };
 
@@ -274,6 +306,17 @@ export default function App() {
     };
 
     setAllNotifications(prev => [newNotif, ...prev]);
+
+    const admin = allUsers.find(u => u.role === 'ADMIN');
+    if (admin) {
+      sendSimulatedEmail({
+        recipient: admin.email,
+        subject: `CRITICAL ESCALATION: ${id}`,
+        body: `Ticket ${id} has been escalated by ${user?.name}.\n\nReason: ${reason}`,
+        type: 'ESCALATION',
+        ticketId: id
+      });
+    }
 
     if (selectedTicket?.id === id) {
       setSelectedTicket(prev => prev ? { 
@@ -330,6 +373,30 @@ export default function App() {
       message: `TICKET ${ticketId} ASSIGNED TO ${agent.name.toUpperCase()}`, 
       type: 'success' 
     });
+
+    // Email Notifications
+    sendSimulatedEmail({
+      recipient: agent.email,
+      subject: `New Assignment: Ticket ${ticketId}`,
+      body: `Hello ${agent.name},\n\nYou have been assigned to ticket ${ticketId}: "${tickets.find(t => t.id === ticketId)?.subject}"`,
+      type: 'TICKET_ASSIGNED',
+      ticketId: ticketId
+    });
+
+    const ticket = tickets.find(t => t.id === ticketId);
+    if (ticket) {
+      const customer = allUsers.find(u => u.id === ticket.customerId);
+      if (customer) {
+        sendSimulatedEmail({
+          recipient: customer.email,
+          subject: `Agent Assigned: Ticket ${ticketId}`,
+          body: `Hello ${customer.name},\n\nSupport Agent ${agent.name} has been assigned to your ticket.`,
+          type: 'TICKET_ASSIGNED',
+          ticketId: ticketId
+        });
+      }
+    }
+
     setTimeout(() => setNotification(null), 5000);
   };
 
@@ -360,6 +427,22 @@ export default function App() {
     }
 
     setNotification({ message: `STATUS UPDATED TO ${newStatus}`, type: 'success' });
+
+    // Email Notifications
+    const ticket = tickets.find(t => t.id === ticketId);
+    if (ticket) {
+      const customer = allUsers.find(u => u.id === ticket.customerId);
+      if (customer) {
+        sendSimulatedEmail({
+          recipient: customer.email,
+          subject: `Status Update: Ticket ${ticketId}`,
+          body: `Hello ${customer.name},\n\nThe status of your ticket "${ticket.subject}" has been updated to: ${newStatus}`,
+          type: newStatus === 'RESOLVED' || newStatus === 'CLOSED' ? 'TICKET_RESOLVED' : 'STATUS_UPDATE',
+          ticketId: ticketId
+        });
+      }
+    }
+
     setTimeout(() => setNotification(null), 3000);
   };
 
@@ -402,6 +485,22 @@ export default function App() {
     setUser(null);
     setSelectedTicket(null);
     setView('DASHBOARD');
+  };
+
+  const sendSimulatedEmail = (log: Omit<EmailLog, 'id' | 'timestamp'>) => {
+    const newLog: EmailLog = {
+      ...log,
+      id: Math.random().toString(36).substr(2, 9),
+      timestamp: new Date().toISOString()
+    };
+    setEmailLogs(prev => [newLog, ...prev]);
+    
+    // Also show a temporary visual feedback for the user
+    setNotification({ 
+      message: `EMAIL DISPATCHED TO ${log.recipient.toUpperCase()}`, 
+      type: 'success' 
+    });
+    setTimeout(() => setNotification(null), 3000);
   };
 
   // Dashboard Stats
@@ -762,6 +861,7 @@ export default function App() {
                 agentPerformanceData={agentPerformanceData}
                 allUsers={allUsers}
                 tickets={tickets}
+                emailLogs={emailLogs}
               />
             )}
             {view === 'DASHBOARD' && (
@@ -1957,15 +2057,17 @@ function StatusIndicator({ status }: { status: AvailabilityStatus }) {
   );
 }
 
-function AdminDashboardView({ stats, statusData, chartData, agentPerformanceData, allUsers, tickets }: { 
+function AdminDashboardView({ stats, statusData, chartData, agentPerformanceData, allUsers, tickets, emailLogs }: { 
   stats: any, 
   statusData: any, 
   chartData: any, 
   agentPerformanceData: any,
   allUsers: User[],
-  tickets: SupportTicket[]
+  tickets: SupportTicket[],
+  emailLogs: EmailLog[]
 }) {
   const activeAgents = allUsers.filter(u => u.role === 'AGENT');
+  const [showEmailHub, setShowEmailHub] = useState(false);
   
   return (
     <motion.div 
@@ -1980,6 +2082,17 @@ function AdminDashboardView({ stats, statusData, chartData, agentPerformanceData
           <p className="text-[11px] text-[#64748b] font-medium uppercase tracking-wider">Operational KPI & Staffing Overview</p>
         </div>
         <div className="flex gap-2">
+           <button 
+             onClick={() => setShowEmailHub(!showEmailHub)}
+             className={`px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all border font-bold text-[10px] uppercase tracking-wider ${
+               showEmailHub 
+                ? 'bg-[#1e293b] text-white border-[#1e293b]' 
+                : 'bg-white text-[#64748b] border-[#e2e8f0] hover:bg-[#f8fafc]'
+             }`}
+           >
+              <MessageSquare className="w-3.5 h-3.5" /> 
+              {showEmailHub ? 'Dashboard' : 'Email Hub'}
+           </button>
            <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
               <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-tight">{activeAgents.filter(a => a.status === 'AVAILABLE').length} Agents Online</span>
@@ -1987,116 +2100,181 @@ function AdminDashboardView({ stats, statusData, chartData, agentPerformanceData
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Lifecycle" value={stats.total} icon={<Ticket className="w-4 h-4 text-[#3b82f6]" />} />
-        <StatCard label="Resolution Rate" value={`${Math.round((stats.resolved/(stats.total || 1))*100)}%`} icon={<CheckCircle2 className="w-4 h-4 text-[#10b981]" />} />
-        <StatCard label="Active Backlog" value={stats.pending} icon={<Clock className="w-4 h-4 text-[#f59e0b]" />} />
-        <StatCard label="Critical Breach" value={stats.urgent} icon={<AlertCircle className="w-4 h-4 text-[#ef4444]" />} />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-8 space-y-6">
-          <div className="bg-white p-6 rounded-xl border border-[#e2e8f0] shadow-sm">
-            <h3 className="card-label mb-4">Agent Workload & Availability Status</h3>
-            <div className="space-y-3">
-              {activeAgents.map(agent => {
-                const agentTickets = tickets.filter(t => t.agentId === agent.id && t.status !== 'RESOLVED' && t.status !== 'CLOSED');
-                const loadPercent = Math.min((agentTickets.length / 5) * 100, 100);
-                
-                return (
-                  <div key={agent.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] gap-4">
-                    <div className="flex items-center gap-3 min-w-[180px]">
-                      <div className="relative">
-                        <img src={agent.avatar} className="w-10 h-10 rounded-lg border border-white shadow-sm" alt={agent.name} />
-                        <div className="absolute -bottom-1 -right-1">
-                          <StatusIndicator status={agent.status} />
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-[#1e293b]">{agent.name}</p>
-                        <p className={`text-[9px] font-bold uppercase tracking-tighter ${
-                          agent.status === 'AVAILABLE' ? 'text-emerald-600' :
-                          agent.status === 'ON_BREAK' ? 'text-amber-600' : 'text-gray-400'
-                        }`}>{agent.status.replace('_', ' ')}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex-1 flex items-center gap-4">
-                      <div className="flex-1">
-                        <div className="flex justify-between mb-1 text-[9px] font-bold uppercase text-[#64748b]">
-                          <span>Current Workload</span>
-                          <span className={agentTickets.length > 4 ? 'text-rose-500' : 'text-[#3b82f6]'}>{agentTickets.length} / 5 Cap</span>
-                        </div>
-                        <div className="w-full h-2 bg-[#e2e8f0] rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full transition-all duration-700 ${
-                              loadPercent > 80 ? 'bg-rose-500' : loadPercent > 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                            }`}
-                            style={{ width: `${loadPercent}%` }}
-                          />
-                        </div>
-                      </div>
-                      <div className="text-right min-w-[60px]">
-                        <p className="text-xs font-bold text-[#1e293b]">{agentPerformanceData.find((d: any) => d.name === agent.name)?.avgTime || '0.0h'}</p>
-                        <p className="text-[8px] text-[#94a3b8] font-bold uppercase">Avg Handle</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+      <AnimatePresence mode="wait">
+        {showEmailHub ? (
+          <motion.div
+            key="email-hub"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="bg-white p-6 rounded-xl border border-[#e2e8f0] shadow-sm"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="card-label">Communication Ledger</h3>
+                <h3 className="text-sm font-bold text-[#0f172a]">Recent Email Dispatches</h3>
+              </div>
+              <div className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest">
+                Total Logs: {emailLogs.length}
+              </div>
             </div>
-          </div>
-        </div>
-
-        <div className="lg:col-span-4 space-y-6">
-          <div className="bg-white p-6 rounded-xl border border-[#e2e8f0] shadow-sm">
-            <h3 className="card-label mb-4">Volume by Class</h3>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={60}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {chartData.map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'][index % 4]} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-2 mt-4">
-              {chartData.map((item: any, i: number) => (
-                <div key={item.name} className="flex items-center justify-between text-[10px]">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'][i % 4] }} />
-                    <span className="text-[#64748b] font-bold">{item.name}</span>
+            
+            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+              {emailLogs.length === 0 ? (
+                <div className="py-20 text-center">
+                  <div className="w-16 h-16 bg-[#f8fafc] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#e2e8f0] text-[#94a3b8]">
+                    <Bell className="w-8 h-8 opacity-20" />
                   </div>
-                  <span className="font-bold text-[#1e293b]">{item.value}</span>
+                  <p className="text-[11px] font-bold text-[#94a3b8] uppercase tracking-widest">No communications recorded yet</p>
                 </div>
-              ))}
+              ) : (
+                emailLogs.map(log => (
+                  <div key={log.id} className="p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] group hover:border-[#3b82f6] transition-all">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border shadow-sm ${
+                          log.type === 'ESCALATION' ? 'bg-rose-50 border-rose-100 text-rose-500' :
+                          log.type === 'TICKET_RESOLVED' ? 'bg-emerald-50 border-emerald-100 text-emerald-500' :
+                          'bg-blue-50 border-blue-100 text-blue-500'
+                        }`}>
+                          <MessageSquare className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-[#0f172a] group-hover:text-[#3b82f6] transition-colors">{log.subject}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <p className="text-[9px] font-bold text-[#64748b] uppercase tracking-tighter">To: {log.recipient}</p>
+                            <span className="w-1 h-1 bg-[#e2e8f0] rounded-full" />
+                            <p className="text-[9px] font-bold text-[#94a3b8] uppercase tracking-tighter">{new Date(log.timestamp).toLocaleTimeString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-[8px] font-bold px-1.5 py-0.5 bg-white border border-[#e2e8f0] rounded text-[#64748b] uppercase">
+                        {log.ticketId}
+                      </div>
+                    </div>
+                    <div className="mt-3 bg-white p-3 rounded-lg border border-[#e2e8f0] text-[11px] text-[#475569] leading-relaxed whitespace-pre-wrap">
+                      {log.body}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          </div>
+          </motion.div>
+        ) : (
+          <motion.div key="main-stats" className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard label="Total Lifecycle" value={stats.total} icon={<Ticket className="w-4 h-4 text-[#3b82f6]" />} />
+              <StatCard label="Resolution Rate" value={`${Math.round((stats.resolved/(stats.total || 1))*100)}%`} icon={<CheckCircle2 className="w-4 h-4 text-[#10b981]" />} />
+              <StatCard label="Active Backlog" value={stats.pending} icon={<Clock className="w-4 h-4 text-[#f59e0b]" />} />
+              <StatCard label="Critical Breach" value={stats.urgent} icon={<AlertCircle className="w-4 h-4 text-[#ef4444]" />} />
+            </div>
 
-          <div className="bg-[#1e293b] p-6 rounded-xl border border-[#0f172a] shadow-lg text-white">
-            <div className="flex items-center gap-3 mb-4">
-               <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center border border-blue-500/30">
-                  <TrendingUp className="w-5 h-5 text-blue-400" />
-               </div>
-               <div>
-                  <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest leading-none mb-1">Efficiency Factor</p>
-                  <p className="text-lg font-bold">94.2%</p>
-               </div>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-8 space-y-6">
+                <div className="bg-white p-6 rounded-xl border border-[#e2e8f0] shadow-sm">
+                  <h3 className="card-label mb-4">Agent Workload & Availability Status</h3>
+                  <div className="space-y-3">
+                    {activeAgents.map(agent => {
+                      const agentTickets = tickets.filter(t => t.agentId === agent.id && t.status !== 'RESOLVED' && t.status !== 'CLOSED');
+                      const loadPercent = Math.min((agentTickets.length / 5) * 100, 100);
+                      
+                      return (
+                        <div key={agent.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] gap-4">
+                          <div className="flex items-center gap-3 min-w-[180px]">
+                            <div className="relative">
+                              <img src={agent.avatar} className="w-10 h-10 rounded-lg border border-white shadow-sm" alt={agent.name} />
+                              <div className="absolute -bottom-1 -right-1">
+                                <StatusIndicator status={agent.status} />
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-[#1e293b]">{agent.name}</p>
+                              <p className={`text-[9px] font-bold uppercase tracking-tighter ${
+                                agent.status === 'AVAILABLE' ? 'text-emerald-600' :
+                                agent.status === 'ON_BREAK' ? 'text-amber-600' : 'text-gray-400'
+                              }`}>{agent.status.replace('_', ' ')}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex-1 flex items-center gap-4">
+                            <div className="flex-1">
+                              <div className="flex justify-between mb-1 text-[9px] font-bold uppercase text-[#64748b]">
+                                <span>Current Workload</span>
+                                <span className={agentTickets.length > 4 ? 'text-rose-500' : 'text-[#3b82f6]'}>{agentTickets.length} / 5 Cap</span>
+                              </div>
+                              <div className="w-full h-2 bg-[#e2e8f0] rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full transition-all duration-700 ${
+                                    loadPercent > 80 ? 'bg-rose-500' : loadPercent > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                                  }`}
+                                  style={{ width: `${loadPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div className="text-right min-w-[60px]">
+                              <p className="text-xs font-bold text-[#1e293b]">{agentPerformanceData.find((d: any) => d.name === agent.name)?.avgTime || '0.0h'}</p>
+                              <p className="text-[8px] text-[#94a3b8] font-bold uppercase">Avg Handle</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="lg:col-span-4 space-y-6">
+                <div className="bg-white p-6 rounded-xl border border-[#e2e8f0] shadow-sm">
+                  <h3 className="card-label mb-4">Volume by Class</h3>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={chartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={40}
+                          outerRadius={60}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {chartData.map((entry: any, index: number) => (
+                            <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'][index % 4]} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="space-y-2 mt-4">
+                    {chartData.map((item: any, i: number) => (
+                      <div key={item.name} className="flex items-center justify-between text-[10px]">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'][i % 4] }} />
+                          <span className="text-[#64748b] font-bold">{item.name}</span>
+                        </div>
+                        <span className="font-bold text-[#1e293b]">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-[#1e293b] p-6 rounded-xl border border-[#0f172a] shadow-lg text-white">
+                  <div className="flex items-center gap-3 mb-4">
+                     <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center border border-blue-500/30">
+                        <TrendingUp className="w-5 h-5 text-blue-400" />
+                     </div>
+                     <div>
+                        <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest leading-none mb-1">Efficiency Factor</p>
+                        <p className="text-lg font-bold">94.2%</p>
+                     </div>
+                  </div>
+                  <p className="text-[10px] text-blue-100/60 leading-relaxed">System-wide performance is within nominal parameters. Response times are stable.</p>
+                </div>
+              </div>
             </div>
-            <p className="text-[10px] text-blue-100/60 leading-relaxed">System-wide performance is within nominal parameters. Response times are stable.</p>
-          </div>
-        </div>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
