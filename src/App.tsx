@@ -28,7 +28,8 @@ import {
   TrendingUp,
   Settings as SettingsIcon,
   Bell,
-  Star
+  Star,
+  UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -214,12 +215,109 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [escalationPrompt, setEscalationPrompt] = useState<string | null>(null);
   const [escalationReasonInput, setEscalationReasonInput] = useState('');
+  const [isEscalating, setIsEscalating] = useState(false);
+  const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
+  const [bulkActionModal, setBulkActionModal] = useState<{ type: 'status' | 'assign', value: string } | null>(null);
+
+  const toggleSelectTicket = (id: string) => {
+    setSelectedTicketIds(prev => 
+      prev.includes(id) ? prev.filter(tid => tid !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkStatusChange = (newStatus: SupportTicket['status']) => {
+    const timestamp = new Date().toISOString();
+    
+    setTickets(prev => prev.map(t => {
+      if (selectedTicketIds.includes(t.id)) {
+        const historyEntry = {
+          id: Math.random().toString(36).substr(2, 9),
+          action: `Bulk Status Change to ${newStatus}`,
+          user: user?.name || 'System',
+          timestamp,
+          type: 'status' as const
+        };
+        
+        // Notification for each ticket
+        const customer = allUsers.find(u => u.id === t.customerId);
+        if (customer) {
+          sendSimulatedEmail({
+            recipient: customer.email,
+            subject: `Bulk Update: Ticket ${t.id}`,
+            body: `Hello ${customer.name},\n\nThe status of your ticket "${t.subject}" has been updated to: ${newStatus} as part of a bulk operation.`,
+            type: newStatus === 'RESOLVED' || newStatus === 'CLOSED' ? 'TICKET_RESOLVED' : 'STATUS_UPDATE',
+            ticketId: t.id
+          });
+        }
+        
+        return { ...t, status: newStatus, history: [...t.history, historyEntry] };
+      }
+      return t;
+    }));
+
+    setNotification({ message: `EXECUTED BULK STATUS CHANGE FOR ${selectedTicketIds.length} TICKETS`, type: 'success' });
+    setSelectedTicketIds([]);
+    setBulkActionModal(null);
+    setTimeout(() => setNotification(null), 5000);
+  };
+
+  const handleBulkAssign = (agentId: string) => {
+    const agent = allUsers.find(u => u.id === agentId);
+    if (!agent) return;
+    
+    const timestamp = new Date().toISOString();
+
+    setTickets(prev => prev.map(t => {
+      if (selectedTicketIds.includes(t.id)) {
+        const historyEntry = {
+          id: Math.random().toString(36).substr(2, 9),
+          action: `Bulk Assigned to ${agent.name}`,
+          user: user?.name || 'System',
+          timestamp,
+          type: 'assignment' as const
+        };
+
+        // Emails
+        sendSimulatedEmail({
+          recipient: agent.email,
+          subject: `Bulk Assignment: Ticket ${t.id}`,
+          body: `Hello ${agent.name},\n\nYou have been bulk-assigned to ticket ${t.id}: "${t.subject}"`,
+          type: 'TICKET_ASSIGNED',
+          ticketId: t.id
+        });
+
+        const customer = allUsers.find(u => u.id === t.customerId);
+        if (customer) {
+          sendSimulatedEmail({
+            recipient: customer.email,
+            subject: `Agent Assigned: Ticket ${t.id}`,
+            body: `Hello ${customer.name},\n\nSupport Agent ${agent.name} has been assigned to your ticket via bulk operation.`,
+            type: 'TICKET_ASSIGNED',
+            ticketId: t.id
+          });
+        }
+
+        return { ...t, agentId: agent.id, agentName: agent.name, status: 'ASSIGNED' as const, history: [...t.history, historyEntry] };
+      }
+      return t;
+    }));
+
+    setNotification({ message: `EXECUTED BULK ASSIGNMENT TO ${agent.name.toUpperCase()}`, type: 'success' });
+    setSelectedTicketIds([]);
+    setBulkActionModal(null);
+    setTimeout(() => setNotification(null), 5000);
+  };
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterPriority, setFilterPriority] = useState<string>('ALL');
   const [filterAgent, setFilterAgent] = useState<string>('ALL');
+  const [filterCustomer, setFilterCustomer] = useState<string>('ALL');
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+  const [filterDateTo, setFilterDateTo] = useState<string>('');
+  const [filterAgentStatus, setFilterAgentStatus] = useState<string>('ALL');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Auth Handling
   const handleLogin = (role: Role) => {
@@ -276,63 +374,92 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const handleEscalate = (id: string, reason: string) => {
-    const timestamp = new Date().toISOString();
-    const historyEntry = {
-      id: Math.random().toString(36).substr(2, 9),
-      action: `Escalated: ${reason}`,
-      user: user?.name || 'Unknown',
-      timestamp,
-      type: 'escalation' as const
-    };
-
-    setTickets(prev => prev.map(t => 
-      t.id === id ? { 
-        ...t, 
-        isEscalated: true, 
-        escalationReason: reason,
-        priority: (t.priority === 'URGENT' ? 'URGENT' : t.priority === 'HIGH' ? 'URGENT' : 'HIGH') as SupportTicket['priority'],
-        history: [...t.history, historyEntry]
-      } : t
-    ));
-    
-    const newNotif: AppNotification = {
-      id: Math.random().toString(36).substr(2, 9),
-      ticketId: id,
-      message: `TICKET ${id} ESCALATED`,
-      reason: reason,
-      timestamp,
-      read: false
-    };
-
-    setAllNotifications(prev => [newNotif, ...prev]);
-
-    const admin = allUsers.find(u => u.role === 'ADMIN');
-    if (admin) {
-      sendSimulatedEmail({
-        recipient: admin.email,
-        subject: `CRITICAL ESCALATION: ${id}`,
-        body: `Ticket ${id} has been escalated by ${user?.name}.\n\nReason: ${reason}`,
-        type: 'ESCALATION',
-        ticketId: id
+  const handleEscalate = async (id: string, reason: string) => {
+    setIsEscalating(true);
+    try {
+      // Server-side validation call
+      const response = await fetch(`/api/tickets/${id}/escalate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
       });
-    }
 
-    if (selectedTicket?.id === id) {
-      setSelectedTicket(prev => prev ? { 
-        ...prev, 
-        isEscalated: true, 
-        escalationReason: reason,
-        history: [...prev.history, historyEntry]
-      } : null);
-    }
+      const data = await response.json();
 
-    setNotification({ 
-      message: `ALERT: TICKET ${id} ESCALATED`, 
-      type: 'alert' 
-    });
-    setEscalationPrompt(null);
-    setEscalationReasonInput('');
+      if (!response.ok) {
+        setNotification({ 
+          message: data.error || 'SERVER VALIDATION ERROR', 
+          type: 'alert' 
+        });
+        setTimeout(() => setNotification(null), 5000);
+        setIsEscalating(false);
+        return;
+      }
+      
+      const timestamp = new Date().toISOString();
+      const historyEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        action: `Escalated: ${reason}`,
+        user: user?.name || 'Unknown',
+        timestamp,
+        type: 'escalation' as const
+      };
+
+      setTickets(prev => prev.map(t => 
+        t.id === id ? { 
+          ...t, 
+          isEscalated: true, 
+          escalationReason: reason,
+          priority: (t.priority === 'URGENT' ? 'URGENT' : t.priority === 'HIGH' ? 'URGENT' : 'HIGH') as SupportTicket['priority'],
+          history: [...t.history, historyEntry]
+        } : t
+      ));
+      
+      const newNotif: AppNotification = {
+        id: Math.random().toString(36).substr(2, 9),
+        ticketId: id,
+        message: `TICKET ${id} ESCALATED`,
+        reason: reason,
+        timestamp,
+        read: false
+      };
+
+      setAllNotifications(prev => [newNotif, ...prev]);
+
+      const admin = allUsers.find(u => u.role === 'ADMIN');
+      if (admin) {
+        sendSimulatedEmail({
+          recipient: admin.email,
+          subject: `CRITICAL ESCALATION: ${id}`,
+          body: `Ticket ${id} has been escalated by ${user?.name}.\n\nReason: ${reason}`,
+          type: 'ESCALATION',
+          ticketId: id
+        });
+      }
+
+      if (selectedTicket?.id === id) {
+        setSelectedTicket(prev => prev ? { 
+          ...prev, 
+          isEscalated: true, 
+          escalationReason: reason,
+          history: [...prev.history, historyEntry]
+        } : null);
+      }
+
+      setNotification({ 
+        message: data.message || `ALERT: TICKET ${id} ESCALATED`, 
+        type: 'success' 
+      });
+      setEscalationPrompt(null);
+      setEscalationReasonInput('');
+    } catch (error) {
+      setNotification({ 
+        message: 'NETWORK ERROR: COULD NOT CONNECT TO VALIDATION SERVER', 
+        type: 'alert' 
+      });
+    } finally {
+      setIsEscalating(false);
+    }
     setTimeout(() => setNotification(null), 5000);
   };
 
@@ -398,6 +525,60 @@ export default function App() {
     }
 
     setTimeout(() => setNotification(null), 5000);
+  };
+
+  const handleClaimTicket = (ticketId: string) => {
+    if (!user || user.role !== 'AGENT') return;
+    if (user.status !== 'AVAILABLE') {
+      setNotification({ message: 'MUST BE ONLINE TO CLAIM TICKETS', type: 'alert' });
+      setTimeout(() => setNotification(null), 3000);
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+    const historyEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      action: `Ticket claimed by Agent`,
+      user: user.name,
+      timestamp,
+      type: 'assignment' as const
+    };
+
+    setTickets(prev => prev.map(t => 
+      t.id === ticketId ? { 
+        ...t, 
+        agentId: user.id, 
+        status: 'ASSIGNED' as const,
+        history: [...t.history, historyEntry] 
+      } : t
+    ));
+
+    if (selectedTicket?.id === ticketId) {
+      setSelectedTicket(prev => prev ? { 
+        ...prev, 
+        agentId: user!.id, 
+        status: 'ASSIGNED' as const,
+        history: [...prev.history, historyEntry] 
+      } : null);
+    }
+
+    // Notifications
+    const ticket = tickets.find(t => t.id === ticketId);
+    if (ticket) {
+      const customer = allUsers.find(u => u.id === ticket.customerId);
+      if (customer) {
+        sendSimulatedEmail({
+          recipient: customer.email,
+          subject: `Agent Assigned: Ticket ${ticketId}`,
+          body: `Hello ${customer.name},\n\nSupport Agent ${user.name} has claimed your ticket and is starting a review.`,
+          type: 'TICKET_ASSIGNED',
+          ticketId: ticketId
+        });
+      }
+    }
+
+    setNotification({ message: 'TICKET CLAIMED SUCCESSFULLY', type: 'success' });
+    setTimeout(() => setNotification(null), 3000);
   };
 
   const handleStatusChange = (ticketId: string, newStatus: SupportTicket['status']) => {
@@ -551,6 +732,28 @@ export default function App() {
       const matchStatus = filterStatus === 'ALL' || t.status === filterStatus;
       const matchPriority = filterPriority === 'ALL' || t.priority === filterPriority;
       const matchAgent = filterAgent === 'ALL' || t.agentName === filterAgent;
+      const matchCustomer = filterCustomer === 'ALL' || t.customerId === filterCustomer;
+      
+      let matchDate = true;
+      if (filterDateFrom) {
+        matchDate = matchDate && new Date(t.createdAt) >= new Date(filterDateFrom);
+      }
+      if (filterDateTo) {
+        // Set to end of day for To date
+        const toDate = new Date(filterDateTo);
+        toDate.setHours(23, 59, 59, 999);
+        matchDate = matchDate && new Date(t.createdAt) <= toDate;
+      }
+
+      let matchAgentStatus = true;
+      if (filterAgentStatus !== 'ALL') {
+        if (t.agentId) {
+          const agentUser = allUsers.find(u => u.id === t.agentId);
+          matchAgentStatus = agentUser?.status === filterAgentStatus;
+        } else {
+          matchAgentStatus = false; // "Filter by status" implies we only want tickets with agents whose status matches
+        }
+      }
       
       const searchLower = searchQuery.toLowerCase();
       const matchSearch = searchQuery === '' || 
@@ -558,9 +761,9 @@ export default function App() {
         t.subject.toLowerCase().includes(searchLower) ||
         t.description.toLowerCase().includes(searchLower);
 
-      return matchStatus && matchPriority && matchAgent && matchSearch;
+      return matchStatus && matchPriority && matchAgent && matchCustomer && matchDate && matchAgentStatus && matchSearch;
     });
-  }, [tickets, filterStatus, filterPriority, filterAgent, searchQuery]);
+  }, [tickets, filterStatus, filterPriority, filterAgent, filterCustomer, filterDateFrom, filterDateTo, filterAgentStatus, searchQuery, allUsers]);
 
   const recentActivity = useMemo(() => {
     const allEvents = tickets.flatMap(t => t.history.map(h => ({ ...h, ticketId: t.id, ticketSubject: t.subject })));
@@ -1104,6 +1307,31 @@ export default function App() {
               >
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#e2e8f0] shadow-sm">
                    <div className="flex flex-wrap items-center gap-3">
+                    {user.role !== 'CUSTOMER' && (
+                      <div className="flex items-center gap-2 pr-2 border-r border-[#e2e8f0]">
+                        <button 
+                          onClick={() => {
+                            if (selectedTicketIds.length === filteredTickets.length) {
+                              setSelectedTicketIds([]);
+                            } else {
+                              setSelectedTicketIds(filteredTickets.map(t => t.id));
+                            }
+                          }}
+                          className={`w-5 h-5 rounded border transition-all flex items-center justify-center ${
+                            selectedTicketIds.length === filteredTickets.length && filteredTickets.length > 0
+                              ? 'bg-[#3b82f6] border-[#3b82f6] text-white' 
+                              : 'border-[#cbd5e1] bg-white hover:border-[#3b82f6]'
+                          }`}
+                        >
+                          {selectedTicketIds.length === filteredTickets.length && filteredTickets.length > 0 && (
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-tighter">
+                          {selectedTicketIds.length > 0 ? `${selectedTicketIds.length} Selected` : 'Select All'}
+                        </span>
+                      </div>
+                    )}
                     <div className="relative">
                       <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
                       <input 
@@ -1155,16 +1383,35 @@ export default function App() {
                         ))}
                       </select>
 
-                      {(filterStatus !== 'ALL' || filterPriority !== 'ALL' || filterAgent !== 'ALL') && (
+                      <button 
+                        onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
+                          showAdvancedFilters || filterCustomer !== 'ALL' || filterDateFrom || filterDateTo || filterAgentStatus !== 'ALL'
+                            ? 'bg-[#3b82f6] border-[#3b82f6] text-white' 
+                            : 'bg-white border-[#e2e8f0] text-[#64748b] hover:bg-[#f8fafc]'
+                        }`}
+                      >
+                        <SettingsIcon className="w-3 h-3" />
+                        <span>Filters</span>
+                        {(filterCustomer !== 'ALL' || filterDateFrom || filterDateTo || filterAgentStatus !== 'ALL') && (
+                          <span className="w-1.5 h-1.5 bg-white rounded-full ml-0.5" />
+                        )}
+                      </button>
+
+                      {(filterStatus !== 'ALL' || filterPriority !== 'ALL' || filterAgent !== 'ALL' || filterCustomer !== 'ALL' || filterDateFrom !== '' || filterDateTo !== '' || filterAgentStatus !== 'ALL') && (
                         <button 
                           onClick={() => {
                             setFilterStatus('ALL');
                             setFilterPriority('ALL');
                             setFilterAgent('ALL');
+                            setFilterCustomer('ALL');
+                            setFilterDateFrom('');
+                            setFilterDateTo('');
+                            setFilterAgentStatus('ALL');
                           }}
                           className="text-[10px] font-bold text-[#ef4444] uppercase tracking-wider hover:underline px-2"
                         >
-                          Clear
+                          Reset
                         </button>
                       )}
                     </div>
@@ -1177,6 +1424,68 @@ export default function App() {
                    </button>
                 </div>
 
+                <AnimatePresence>
+                  {showAdvancedFilters && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden bg-[#f8fafc] border-x border-b border-[#e2e8f0] rounded-b-xl -mt-2 mb-4"
+                    >
+                      <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-bold text-[#64748b] uppercase tracking-widest px-1">Customer Filter</label>
+                          <select 
+                            value={filterCustomer}
+                            onChange={(e) => setFilterCustomer(e.target.value)}
+                            className="w-full bg-white border border-[#e2e8f0] text-[#1e293b] text-[10px] font-bold uppercase tracking-wider rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-[#3b82f6]"
+                          >
+                            <option value="ALL">All Customers</option>
+                            {Array.from(new Set(tickets.map(t => t.customerId))).map(cId => {
+                              const customer = allUsers.find(u => u.id === cId) || { name: tickets.find(t => t.customerId === cId)?.customerName || 'Unknown' };
+                              return <option key={cId} value={cId}>{customer.name}</option>;
+                            })}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-bold text-[#64748b] uppercase tracking-widest px-1">Agent Status Filter</label>
+                          <select 
+                            value={filterAgentStatus}
+                            onChange={(e) => setFilterAgentStatus(e.target.value)}
+                            className="w-full bg-white border border-[#e2e8f0] text-[#1e293b] text-[10px] font-bold uppercase tracking-wider rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-[#3b82f6]"
+                          >
+                            <option value="ALL">Any Agent Status</option>
+                            <option value="AVAILABLE">Agent Available</option>
+                            <option value="ON_BREAK">Agent On Break</option>
+                            <option value="OFFLINE">Agent Offline</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-bold text-[#64748b] uppercase tracking-widest px-1">Date Created (From)</label>
+                          <input 
+                            type="date"
+                            value={filterDateFrom}
+                            onChange={(e) => setFilterDateFrom(e.target.value)}
+                            className="w-full bg-white border border-[#e2e8f0] text-[#1e293b] text-[10px] font-bold uppercase tracking-wider rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-[#3b82f6]"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-bold text-[#64748b] uppercase tracking-widest px-1">Date Created (To)</label>
+                          <input 
+                            type="date"
+                            value={filterDateTo}
+                            onChange={(e) => setFilterDateTo(e.target.value)}
+                            className="w-full bg-white border border-[#e2e8f0] text-[#1e293b] text-[10px] font-bold uppercase tracking-wider rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-[#3b82f6]"
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <div className="grid grid-cols-1 gap-3">
                   {filteredTickets.length > 0 ? (
                     filteredTickets.map(t => (
@@ -1184,10 +1493,24 @@ export default function App() {
                         key={t.id} 
                         layoutId={t.id}
                         onClick={() => setSelectedTicket(t)}
-                        className="bg-white p-5 rounded-xl border border-[#e2e8f0] shadow-sm hover:border-[#3b82f6] transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                        className={`bg-white p-5 rounded-xl border transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative group ${
+                          selectedTicketIds.includes(t.id) ? 'border-[#3b82f6] bg-[#3b82f6]/5 shadow-md' : 'border-[#e2e8f0] shadow-sm hover:border-[#3b82f6]'
+                        }`}
                       >
                         <div className="flex items-center gap-4 flex-1">
-                          <div className="w-10 h-10 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg flex items-center justify-center shadow-inner">
+                          {user.role !== 'CUSTOMER' && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); toggleSelectTicket(t.id); }}
+                              className={`w-5 h-5 rounded border transition-all flex items-center justify-center shrink-0 ${
+                                selectedTicketIds.includes(t.id) 
+                                  ? 'bg-[#3b82f6] border-[#3b82f6] text-white shadow-sm' 
+                                  : 'border-[#cbd5e1] bg-white group-hover:border-[#3b82f6]'
+                              }`}
+                            >
+                              {selectedTicketIds.includes(t.id) && <CheckCircle2 className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
+                          <div className="w-10 h-10 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg flex items-center justify-center shadow-inner group-hover:border-[#3b82f6]/30">
                             <PriorityIcon priority={t.priority} />
                           </div>
                           <div>
@@ -1202,6 +1525,15 @@ export default function App() {
                           <div className="flex items-center gap-6 w-full sm:w-auto justify-between border-t sm:border-t-0 pt-3 sm:pt-0">
                             {user.role !== 'CUSTOMER' && (
                               <div className="flex items-center gap-1.5 p-1 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                                {user.role === 'AGENT' && !t.agentId && (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleClaimTicket(t.id); }}
+                                    title="Claim Ticket"
+                                    className="w-6 h-6 rounded-md flex items-center justify-center transition-all bg-[#3b82f6] text-white shadow-sm hover:bg-[#2563eb]"
+                                  >
+                                    <UserPlus className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); handleStatusChange(t.id, 'IN_PROGRESS'); }}
                                   title="Mark In Progress"
@@ -1295,6 +1627,72 @@ export default function App() {
                     </motion.div>
                   )}
                 </div>
+
+                {/* Bulk Actions Bar */}
+                <AnimatePresence>
+                  {selectedTicketIds.length > 0 && (
+                    <motion.div 
+                      initial={{ y: 100 }}
+                      animate={{ y: 0 }}
+                      exit={{ y: 100 }}
+                      className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-[#1e293b] text-white px-6 py-4 rounded-2xl shadow-2xl z-[60] flex items-center gap-6 border border-[#334155]"
+                    >
+                      <div className="flex items-center gap-3 pr-6 border-r border-[#334155]">
+                        <div className="w-8 h-8 bg-[#3b82f6] rounded-lg flex items-center justify-center">
+                          <CheckCircle2 className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-bold uppercase tracking-widest leading-none mb-1">{selectedTicketIds.length} Selected</p>
+                          <p className="text-[9px] text-[#94a3b8] font-medium">Bulk Operator Ready</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[8px] font-bold text-[#94a3b8] uppercase tracking-wider">Set Status</span>
+                          <div className="flex gap-1">
+                            {(['IN_PROGRESS', 'RESOLVED', 'CLOSED', 'ON_HOLD'] as SupportTicket['status'][]).map(status => (
+                              <button 
+                                key={status}
+                                onClick={() => setBulkActionModal({ type: 'status', value: status })}
+                                className="px-3 py-1.5 bg-[#334155] hover:bg-[#3b82f6] rounded text-[9px] font-bold uppercase tracking-tighter transition-all"
+                              >
+                                {status.replace('_', ' ')}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="w-px h-8 bg-[#334155]" />
+
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[8px] font-bold text-[#94a3b8] uppercase tracking-wider">Assign To</span>
+                          <div className="flex gap-1">
+                            {allUsers.filter(u => u.role === 'AGENT' && u.status === 'AVAILABLE').slice(0, 3).map(agent => (
+                              <button 
+                                key={agent.id}
+                                onClick={() => setBulkActionModal({ type: 'assign', value: agent.id })}
+                                className="px-3 py-1.5 bg-[#334155] hover:bg-[#3b82f6] rounded text-[9px] font-bold uppercase tracking-tighter transition-all flex items-center gap-2"
+                              >
+                                <img src={agent.avatar} className="w-3 h-3 rounded-full" alt="" />
+                                {agent.name.split(' ')[0]}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="w-px h-8 bg-[#334155]" />
+
+                        <button 
+                          onClick={() => setSelectedTicketIds([])}
+                          className="px-4 py-2 text-rose-400 hover:text-rose-300 transition-colors text-[10px] font-bold uppercase tracking-widest"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             )}
 
@@ -1761,6 +2159,14 @@ export default function App() {
                   >
                     Dismiss
                   </button>
+                  {user.role === 'AGENT' && !selectedTicket.agentId && (
+                    <button 
+                      onClick={() => handleClaimTicket(selectedTicket.id)}
+                      className="px-5 py-2.5 bg-[#3b82f6] text-white rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-[#2563eb] transition-all shadow-sm flex items-center gap-2"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" /> Claim Ticket
+                    </button>
+                  )}
                   {user.role !== 'CUSTOMER' && !selectedTicket.isEscalated && (
                     <button 
                       onClick={() => setEscalationPrompt(selectedTicket.id)}
@@ -1853,13 +2259,93 @@ export default function App() {
                     Cancel
                   </button>
                   <button 
-                    disabled={!escalationReasonInput.trim()}
+                    disabled={!escalationReasonInput.trim() || isEscalating}
                     onClick={() => handleEscalate(escalationPrompt, escalationReasonInput)}
-                    className="flex-1 py-3 bg-rose-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-rose-600 transition-all shadow-sm disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="flex-1 py-3 bg-rose-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-rose-600 transition-all shadow-sm disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    Confirm Escalation
+                    {isEscalating ? (
+                      <>
+                        <Clock className="w-3 h-3 animate-spin" /> Verifying...
+                      </>
+                    ) : (
+                      'Confirm Escalation'
+                    )}
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {bulkActionModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
+            onClick={() => setBulkActionModal(null)}
+          >
+            <motion.div 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden p-8 border border-[#e2e8f0]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-[#3b82f6]/10 text-[#3b82f6] rounded-xl flex items-center justify-center border border-[#3b82f6]/20 shadow-sm">
+                  <SettingsIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-[#0f172a]">Confirm Bulk Action</h2>
+                  <p className="text-[10px] text-[#64748b] font-bold uppercase tracking-widest leading-none">Security Validation Interface</p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] mb-6">
+                <div className="flex items-center justify-between mb-4 pb-4 border-b border-[#e2e8f0]">
+                  <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">Targets</span>
+                  <span className="text-[11px] font-bold text-[#1e293b]">{selectedTicketIds.length} Tickets</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">Operation</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-[#3b82f6] uppercase">
+                      {bulkActionModal.type === 'status' ? 'Status Update' : 'Assignment'}
+                    </span>
+                    <ChevronRight className="w-3 h-3 text-[#cbd5e1]" />
+                    <span className="text-[11px] font-bold text-[#1e293b] uppercase">
+                      {bulkActionModal.type === 'status' 
+                        ? bulkActionModal.value.replace('_', ' ') 
+                        : (allUsers.find(u => u.id === bulkActionModal.value)?.name || 'Unknown')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-[#64748b] mb-8 leading-relaxed italic border-l-2 border-[#3b82f6] pl-4">
+                This operation will trigger automated email notifications and audit logs for all selected entities. Ensure the status transition aligns with organizational protocol.
+              </p>
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setBulkActionModal(null)}
+                  className="flex-1 py-3 bg-white border border-[#e2e8f0] text-[#64748b] rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#f8fafc] transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    if (bulkActionModal.type === 'status') {
+                      handleBulkStatusChange(bulkActionModal.value as SupportTicket['status']);
+                    } else {
+                      handleBulkAssign(bulkActionModal.value);
+                    }
+                  }}
+                  className="flex-1 py-3 bg-[#1e293b] text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#0f172a] transition-all shadow-md"
+                >
+                  Execute Batch
+                </button>
               </div>
             </motion.div>
           </motion.div>
