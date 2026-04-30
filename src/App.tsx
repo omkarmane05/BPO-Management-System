@@ -216,6 +216,8 @@ export default function App() {
   const [escalationPrompt, setEscalationPrompt] = useState<string | null>(null);
   const [escalationReasonInput, setEscalationReasonInput] = useState('');
   const [isEscalating, setIsEscalating] = useState(false);
+  const [escalationValidationError, setEscalationValidationError] = useState<string | null>(null);
+  const [escalationConfirming, setEscalationConfirming] = useState(false);
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
   const [bulkActionModal, setBulkActionModal] = useState<{ type: 'status' | 'assign', value: string } | null>(null);
 
@@ -452,6 +454,8 @@ export default function App() {
       });
       setEscalationPrompt(null);
       setEscalationReasonInput('');
+      setEscalationConfirming(false);
+      setEscalationValidationError(null);
     } catch (error) {
       setNotification({ 
         message: 'NETWORK ERROR: COULD NOT CONNECT TO VALIDATION SERVER', 
@@ -2213,7 +2217,12 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
-            onClick={() => setEscalationPrompt(null)}
+            onClick={() => {
+              setEscalationPrompt(null);
+              setEscalationReasonInput('');
+              setEscalationConfirming(false);
+              setEscalationValidationError(null);
+            }}
           >
             <motion.div 
               initial={{ y: 20, opacity: 0 }}
@@ -2224,43 +2233,92 @@ export default function App() {
             >
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 bg-rose-50 text-rose-500 rounded-lg flex items-center justify-center border border-rose-100 shadow-sm">
-                  <AlertCircle className="w-5 h-5" />
+                  {escalationConfirming ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-[#0f172a]">Escalate Ticket</h2>
-                  <p className="text-[10px] text-[#64748b] font-bold uppercase tracking-widest">Management Intervention Required</p>
+                  <h2 className="text-lg font-bold text-[#0f172a]">
+                    {escalationConfirming ? 'Confirm Escalation' : 'Escalate Ticket'}
+                  </h2>
+                  <p className="text-[10px] text-[#64748b] font-bold uppercase tracking-widest">
+                    {escalationConfirming ? 'Final Verification Step' : 'Management Intervention Required'}
+                  </p>
                 </div>
               </div>
               
               <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest block mb-2 px-1">Reason for Escalation (Mandatory)</label>
-                  <textarea 
-                    autoFocus
-                    rows={4}
-                    value={escalationReasonInput}
-                    onChange={(e) => setEscalationReasonInput(e.target.value)}
-                    placeholder="Provide a specific justification for management review..."
-                    className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-4 text-xs outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-[#1e293b] placeholder-[#94a3b8] resize-none"
-                  />
-                  <p className="mt-2 text-[9px] text-[#94a3b8] font-medium leading-relaxed">
-                    Escalating a ticket will automatically bump the priority to URGENT and notify the administrative team for immediate attention.
-                  </p>
-                </div>
+                {!escalationConfirming ? (
+                  <div>
+                    <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest block mb-2 px-1">Reason for Escalation (Mandatory)</label>
+                    <textarea 
+                      autoFocus
+                      rows={4}
+                      value={escalationReasonInput}
+                      onChange={(e) => {
+                        setEscalationReasonInput(e.target.value);
+                        if (e.target.value.trim() && escalationValidationError) {
+                          setEscalationValidationError(null);
+                        }
+                      }}
+                      placeholder="Provide a specific justification for management review..."
+                      className={`w-full bg-[#f8fafc] border ${escalationValidationError ? 'border-rose-500' : 'border-[#e2e8f0]'} rounded-xl p-4 text-xs outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-[#1e293b] placeholder-[#94a3b8] resize-none`}
+                    />
+                    {escalationValidationError && (
+                      <p className="mt-2 text-[10px] font-bold text-rose-500 uppercase px-1 flex items-center gap-2">
+                        <AlertCircle className="w-3 h-3" /> {escalationValidationError}
+                      </p>
+                    )}
+                    <p className="mt-2 text-[9px] text-[#94a3b8] font-medium leading-relaxed">
+                      Escalating a ticket will automatically bump the priority to URGENT and notify the administrative team for immediate attention.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest">Escalation Target</span>
+                      <span className="text-[11px] font-bold text-[#1e293b] uppercase tracking-tight">{escalationPrompt}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest block mb-1">Provided Justification</span>
+                      <p className="text-[11px] text-[#475569] leading-relaxed italic border-l-2 border-rose-400 pl-3">
+                        "{escalationReasonInput}"
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-4">
                   <button 
                     onClick={() => {
-                      setEscalationPrompt(null);
-                      setEscalationReasonInput('');
+                      if (escalationConfirming) {
+                        setEscalationConfirming(false);
+                      } else {
+                        setEscalationPrompt(null);
+                        setEscalationReasonInput('');
+                        setEscalationValidationError(null);
+                      }
                     }}
                     className="flex-1 py-3 bg-white border border-[#e2e8f0] text-[#64748b] rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#f8fafc] transition-all"
                   >
-                    Cancel
+                    {escalationConfirming ? 'Back' : 'Cancel'}
                   </button>
                   <button 
-                    disabled={!escalationReasonInput.trim() || isEscalating}
-                    onClick={() => handleEscalate(escalationPrompt, escalationReasonInput)}
+                    disabled={isEscalating}
+                    onClick={() => {
+                      if (!escalationConfirming) {
+                        if (!escalationReasonInput.trim()) {
+                          setEscalationValidationError('Reason is mandatory for escalation.');
+                          return;
+                        }
+                        if (escalationReasonInput.trim().length < 10) {
+                          setEscalationValidationError('Reason must be at least 10 characters.');
+                          return;
+                        }
+                        setEscalationValidationError(null);
+                        setEscalationConfirming(true);
+                      } else {
+                        handleEscalate(escalationPrompt, escalationReasonInput);
+                      }
+                    }}
                     className="flex-1 py-3 bg-rose-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-rose-600 transition-all shadow-sm disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isEscalating ? (
@@ -2268,7 +2326,7 @@ export default function App() {
                         <Clock className="w-3 h-3 animate-spin" /> Verifying...
                       </>
                     ) : (
-                      'Confirm Escalation'
+                      escalationConfirming ? 'Final Confirm' : 'Proceed to Confirm'
                     )}
                   </button>
                 </div>
