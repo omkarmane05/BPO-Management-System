@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import Fuse from 'fuse.js';
 import { 
   BarChart, 
   Bar, 
@@ -732,10 +733,41 @@ export default function App() {
   }, [tickets, agents]);
 
   const filteredTickets = useMemo(() => {
-    return tickets.filter(t => {
-      const matchStatus = filterStatus === 'ALL' || t.status === filterStatus;
-      const matchPriority = filterPriority === 'ALL' || t.priority === filterPriority;
-      const matchAgent = filterAgent === 'ALL' || t.agentName === filterAgent;
+    // 1. Pre-filter by Search Command Syntax (is:, status:, @, etc.)
+    let baseSearch = searchQuery;
+    let overrideFilters = {
+      status: 'ALL',
+      priority: 'ALL',
+      agent: 'ALL'
+    };
+
+    const statusMatch = baseSearch.match(/status:([a-zA-Z_]+)/i);
+    if (statusMatch) {
+      overrideFilters.status = statusMatch[1].toUpperCase();
+      baseSearch = baseSearch.replace(statusMatch[0], '').trim();
+    }
+
+    const priorityMatch = baseSearch.match(/is:([a-zA-Z_]+)/i);
+    if (priorityMatch) {
+      overrideFilters.priority = priorityMatch[1].toUpperCase();
+      baseSearch = baseSearch.replace(priorityMatch[0], '').trim();
+    }
+
+    const agentMatch = baseSearch.match(/@([a-zA-Z0-9_\s]+)/i);
+    if (agentMatch) {
+      overrideFilters.agent = agentMatch[1].trim();
+      baseSearch = baseSearch.replace(agentMatch[0], '').trim();
+    }
+
+    const effectiveStatus = overrideFilters.status !== 'ALL' ? overrideFilters.status : filterStatus;
+    const effectivePriority = overrideFilters.priority !== 'ALL' ? overrideFilters.priority : filterPriority;
+    const effectiveAgent = overrideFilters.agent !== 'ALL' ? overrideFilters.agent : filterAgent;
+
+    // 2. Perform Standard Filtering
+    const preFiltered = tickets.filter(t => {
+      const matchStatus = effectiveStatus === 'ALL' || t.status === effectiveStatus;
+      const matchPriority = effectivePriority === 'ALL' || t.priority === effectivePriority;
+      const matchAgent = effectiveAgent === 'ALL' || t.agentName === effectiveAgent;
       const matchCustomer = filterCustomer === 'ALL' || t.customerId === filterCustomer;
       
       let matchDate = true;
@@ -743,7 +775,6 @@ export default function App() {
         matchDate = matchDate && new Date(t.createdAt) >= new Date(filterDateFrom);
       }
       if (filterDateTo) {
-        // Set to end of day for To date
         const toDate = new Date(filterDateTo);
         toDate.setHours(23, 59, 59, 999);
         matchDate = matchDate && new Date(t.createdAt) <= toDate;
@@ -755,18 +786,24 @@ export default function App() {
           const agentUser = allUsers.find(u => u.id === t.agentId);
           matchAgentStatus = agentUser?.status === filterAgentStatus;
         } else {
-          matchAgentStatus = false; // "Filter by status" implies we only want tickets with agents whose status matches
+          matchAgentStatus = false;
         }
       }
-      
-      const searchLower = searchQuery.toLowerCase();
-      const matchSearch = searchQuery === '' || 
-        t.id.toLowerCase().includes(searchLower) ||
-        t.subject.toLowerCase().includes(searchLower) ||
-        t.description.toLowerCase().includes(searchLower);
 
-      return matchStatus && matchPriority && matchAgent && matchCustomer && matchDate && matchAgentStatus && matchSearch;
+      return matchStatus && matchPriority && matchAgent && matchCustomer && matchDate && matchAgentStatus;
     });
+
+    // 3. Fuzzy Search using Fuse.js on the pre-filtered results
+    if (baseSearch === '') return preFiltered;
+
+    const fuse = new Fuse(preFiltered, {
+      keys: ['id', 'subject', 'description', 'customerName', 'agentName'],
+      threshold: 0.3,
+      distance: 100,
+      includeScore: true
+    });
+
+    return fuse.search(baseSearch).map(result => result.item);
   }, [tickets, filterStatus, filterPriority, filterAgent, filterCustomer, filterDateFrom, filterDateTo, filterAgentStatus, searchQuery, allUsers]);
 
   const recentActivity = useMemo(() => {
@@ -1336,15 +1373,22 @@ export default function App() {
                         </span>
                       </div>
                     )}
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                    <div className="relative group/search">
+                      <Search className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${searchQuery.includes(':') || searchQuery.includes('@') ? 'text-[#3b82f6]' : 'text-[#94a3b8]'}`} />
                       <input 
                         type="text"
-                        placeholder="Search tickets..."
+                        placeholder="Search or is:urgent status:open @agent"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="bg-[#f8fafc] border border-[#e2e8f0] rounded-lg pl-9 pr-4 py-1.5 text-[11px] font-bold text-[#1e293b] outline-none focus:ring-1 focus:ring-[#3b82f6] w-48 placeholder-[#94a3b8] uppercase tracking-wider"
+                        className={`bg-[#f8fafc] border rounded-lg pl-9 pr-4 py-1.5 text-[11px] font-bold text-[#1e293b] outline-none focus:ring-1 focus:ring-[#3b82f6] transition-all placeholder-[#94a3b8] uppercase tracking-wider ${
+                          searchQuery.includes(':') || searchQuery.includes('@') ? 'border-[#3b82f6]/50 w-64' : 'border-[#e2e8f0] w-48'
+                        }`}
                       />
+                      {(searchQuery.includes(':') || searchQuery.includes('@')) && (
+                        <div className="absolute -top-8 left-0 bg-[#1e293b] text-white text-[9px] font-bold px-2 py-1 rounded opacity-0 group-hover/search:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-xl border border-[#334155]">
+                          PRO SEARCH ACTIVE: {searchQuery.match(/(is|status):[a-z]+/gi)?.join(', ')}
+                        </div>
+                      )}
                     </div>
 
                     <div className="w-px h-6 bg-[#e2e8f0] hidden lg:block mx-1" />
