@@ -74,6 +74,7 @@ interface SupportTicket {
   escalationReason?: string;
   rating?: number;
   feedback?: string;
+  dependencyIds?: string[];
   history: {
     id: string;
     action: string;
@@ -114,6 +115,7 @@ const INITIAL_TICKETS: SupportTicket[] = [
     priority: 'HIGH', 
     createdAt: '2024-03-20T10:00:00Z',
     category: 'Authentication',
+    dependencyIds: [],
     history: [
       { id: 'h1', action: 'Ticket Created', user: 'Casey Smith', timestamp: '2024-03-20T10:00:00Z', type: 'creation' },
       { id: 'h2', action: 'Assigned to Sam Rivera', user: 'System', timestamp: '2024-03-20T10:05:00Z', type: 'assignment' },
@@ -130,6 +132,7 @@ const INITIAL_TICKETS: SupportTicket[] = [
     priority: 'MEDIUM', 
     createdAt: '2024-03-21T14:30:00Z',
     category: 'Billing',
+    dependencyIds: [],
     history: [
       { id: 'h4', action: 'Ticket Created', user: 'Casey Smith', timestamp: '2024-03-21T14:30:00Z', type: 'creation' }
     ]
@@ -146,6 +149,7 @@ const INITIAL_TICKETS: SupportTicket[] = [
     priority: 'LOW', 
     createdAt: '2024-03-18T09:15:00Z',
     category: 'Feature Request',
+    dependencyIds: [],
     history: [
       { id: 'h5', action: 'Ticket Created', user: 'Casey Smith', timestamp: '2024-03-18T09:15:00Z', type: 'creation' },
       { id: 'h6', action: 'Assigned to Jordan Lee', user: 'System', timestamp: '2024-03-18T10:00:00Z', type: 'assignment' },
@@ -229,10 +233,32 @@ export default function App() {
   };
 
   const handleBulkStatusChange = (newStatus: SupportTicket['status']) => {
+    // Check if any selected tickets are blocked
+    if (newStatus === 'RESOLVED' || newStatus === 'CLOSED') {
+      const blockedTickets = tickets.filter(t => 
+        selectedTicketIds.includes(t.id) && getBlockers(t).length > 0
+      );
+
+      if (blockedTickets.length > 0) {
+        setNotification({ 
+          message: `BULK OPERATION PARTIALLY BLOCKED: ${blockedTickets.length} TICKET(S) HAVE UNRESOLVED DEPENDENCIES`, 
+          type: 'alert' 
+        });
+        setTimeout(() => setNotification(null), 5000);
+        // We can either stop the whole operation or filter them out.
+        // Let's filter them out and proceed with the rest.
+      }
+    }
+
     const timestamp = new Date().toISOString();
     
     setTickets(prev => prev.map(t => {
       if (selectedTicketIds.includes(t.id)) {
+        // Skip if blocked and trying to close
+        if ((newStatus === 'RESOLVED' || newStatus === 'CLOSED') && getBlockers(t).length > 0) {
+          return t;
+        }
+
         const historyEntry = {
           id: Math.random().toString(36).substr(2, 9),
           action: `Bulk Status Change to ${newStatus}`,
@@ -321,6 +347,7 @@ export default function App() {
   const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [filterAgentStatus, setFilterAgentStatus] = useState<string>('ALL');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [depSearch, setDepSearch] = useState('');
 
   // Auth Handling
   const handleLogin = (role: Role) => {
@@ -586,7 +613,59 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  const getBlockers = (ticket: SupportTicket) => {
+    if (!ticket.dependencyIds || ticket.dependencyIds.length === 0) return [];
+    return tickets.filter(t => 
+      ticket.dependencyIds?.includes(t.id) && 
+      t.status !== 'RESOLVED' && 
+      t.status !== 'CLOSED'
+    );
+  };
+
+  const toggleDependency = (targetTicketId: string, dependencyId: string) => {
+    // Prevent self-dependency
+    if (targetTicketId === dependencyId) return;
+
+    setTickets(prev => {
+      const updated = prev.map(t => {
+        if (t.id === targetTicketId) {
+          const currentDeps = t.dependencyIds || [];
+          const newDeps = currentDeps.includes(dependencyId)
+            ? currentDeps.filter(id => id !== dependencyId)
+            : [...currentDeps, dependencyId];
+          
+          const updatedTicket = { ...t, dependencyIds: newDeps };
+          
+          // Update selectedTicket if it's the one being modified
+          if (selectedTicket?.id === targetTicketId) {
+            setSelectedTicket(updatedTicket);
+          }
+          
+          return updatedTicket;
+        }
+        return t;
+      });
+      return updated;
+    });
+  };
+
   const handleStatusChange = (ticketId: string, newStatus: SupportTicket['status']) => {
+    const ticket = tickets.find(t => t.id === ticketId);
+    if (!ticket) return;
+
+    // Dependency check for RESOLVED or CLOSED
+    if (newStatus === 'RESOLVED' || newStatus === 'CLOSED') {
+      const blockers = getBlockers(ticket);
+      if (blockers.length > 0) {
+        setNotification({ 
+          message: `CANNOT CLOSE: BLOCKED BY ${blockers.length} TICKET(S) (${blockers.map(b => b.id).join(', ')})`, 
+          type: 'alert' 
+        });
+        setTimeout(() => setNotification(null), 5000);
+        return;
+      }
+    }
+
     const timestamp = new Date().toISOString();
     const historyEntry = {
       id: Math.random().toString(36).substr(2, 9),
@@ -615,7 +694,6 @@ export default function App() {
     setNotification({ message: `STATUS UPDATED TO ${newStatus}`, type: 'success' });
 
     // Email Notifications
-    const ticket = tickets.find(t => t.id === ticketId);
     if (ticket) {
       const customer = allUsers.find(u => u.id === ticket.customerId);
       if (customer) {
@@ -1116,6 +1194,50 @@ export default function App() {
                 exit={{ opacity: 0 }}
                 className="space-y-6"
               >
+                {/* Agent Duty Status Toggle */}
+                {user.role === 'AGENT' && (
+                  <div className="bg-white p-4 rounded-xl border border-[#e2e8f0] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                        <img src={user.avatar} className="w-12 h-12 rounded-xl border-2 border-white shadow-md" alt={user.name} referrerPolicy="no-referrer" />
+                        <div className="absolute -bottom-1 -right-1">
+                          <StatusIndicator status={user.status} />
+                        </div>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-[#0f172a] capitalize">Welcome back, {user.name.split(' ')[0]}</h3>
+                        <p className="text-[10px] text-[#64748b] font-bold uppercase tracking-widest">Active Duty Session</p>
+                      </div>
+                    </div>
+
+                    <div className="flex bg-[#f1f5f9] p-1 rounded-xl w-full sm:w-auto">
+                      {(['AVAILABLE', 'ON_BREAK', 'OFFLINE'] as AvailabilityStatus[]).map((s) => {
+                        const isActive = user.status === s;
+                        const config = {
+                          AVAILABLE: { label: 'Available', color: 'text-emerald-600', bg: 'bg-emerald-50', dot: 'bg-emerald-500' },
+                          ON_BREAK: { label: 'On Break', color: 'text-amber-600', bg: 'bg-amber-50', dot: 'bg-amber-500' },
+                          OFFLINE: { label: 'Offline', color: 'text-gray-500', bg: 'bg-gray-50', dot: 'bg-gray-400' }
+                        }[s];
+
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => handleUserStatusUpdate(s)}
+                            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                              isActive 
+                                ? `bg-white shadow-sm ${config.color}` 
+                                : 'text-[#64748b] hover:text-[#1e293b]'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? config.dot : 'bg-[#cbd5e1]'}`} />
+                            {config.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <StatCard 
@@ -1566,7 +1688,14 @@ export default function App() {
                               <span className="text-[9px] bg-[#f1f5f9] px-1.5 py-0.5 rounded text-[#64748b] font-bold uppercase">{t.id}</span>
                               <h4 className="text-sm font-bold text-[#0f172a]">{t.subject}</h4>
                             </div>
-                            <p className="text-[11px] text-[#64748b] line-clamp-1">{t.description}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-[11px] text-[#64748b] line-clamp-1">{t.description}</p>
+                              {getBlockers(t).length > 0 && (
+                                <span className="bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded text-[8px] font-bold border border-amber-100 uppercase tracking-tighter flex items-center gap-1">
+                                  <Clock className="w-2.5 h-2.5" /> Blocked
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         
@@ -2001,6 +2130,133 @@ export default function App() {
                     "{selectedTicket.description}"
                   </div>
                 </div>
+
+                {/* System Dependencies Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="card-label">System Dependencies</h4>
+                    <span className="text-[9px] font-bold text-[#94a3b8] uppercase tracking-widest">Execution Order Enforced</span>
+                  </div>
+                  
+                  <div className="bg-white border border-[#e2e8f0] rounded-xl overflow-hidden shadow-sm">
+                    <div className="p-4 bg-[#f8fafc] border-b border-[#e2e8f0]">
+                      <div className="relative">
+                        <Search className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                        <input 
+                          type="text"
+                          placeholder="Search for blockers to add..."
+                          value={depSearch}
+                          onChange={(e) => setDepSearch(e.target.value)}
+                          className="w-full bg-white border border-[#e2e8f0] rounded-lg pl-8 pr-4 py-1.5 text-[10px] font-bold text-[#1e293b] outline-none focus:ring-1 focus:ring-[#3b82f6] placeholder-[#94a3b8] uppercase tracking-wider"
+                        />
+                      </div>
+                      
+                      {depSearch && (
+                        <div className="mt-2 bg-white border border-[#e2e8f0] rounded-lg shadow-lg max-h-32 overflow-y-auto">
+                          {tickets
+                            .filter(t => t.id !== selectedTicket.id && !selectedTicket.dependencyIds?.includes(t.id) && (t.id.toLowerCase().includes(depSearch.toLowerCase()) || t.subject.toLowerCase().includes(depSearch.toLowerCase())))
+                            .map(t => (
+                              <button
+                                key={t.id}
+                                onClick={() => {
+                                  toggleDependency(selectedTicket.id, t.id);
+                                  setDepSearch('');
+                                }}
+                                className="w-full text-left px-3 py-2 hover:bg-[#f8fafc] flex items-center justify-between border-b last:border-0 border-[#f1f5f9]"
+                              >
+                                <div>
+                                  <span className="text-[8px] font-bold text-[#3b82f6] mr-2">{t.id}</span>
+                                  <span className="text-[10px] font-bold text-[#1e293b] uppercase tracking-tight">{t.subject}</span>
+                                </div>
+                                <PlusCircle className="w-3 h-3 text-[#3b82f6]" />
+                              </button>
+                            ))}
+                          {tickets.filter(t => t.id !== selectedTicket.id && !selectedTicket.dependencyIds?.includes(t.id) && (t.id.toLowerCase().includes(depSearch.toLowerCase()) || t.subject.toLowerCase().includes(depSearch.toLowerCase()))).length === 0 && (
+                            <div className="p-3 text-[10px] text-[#94a3b8] font-medium text-center italic">No candidate tickets found</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="p-4 space-y-2">
+                      {selectedTicket.dependencyIds && selectedTicket.dependencyIds.length > 0 ? (
+                        selectedTicket.dependencyIds.map(depId => {
+                          const depTicket = tickets.find(t => t.id === depId);
+                          if (!depTicket) return null;
+                          return (
+                            <div key={depId} className="flex items-center justify-between p-3 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg group">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-2 h-2 rounded-full ${depTicket.status === 'RESOLVED' || depTicket.status === 'CLOSED' ? 'bg-[#10b981]' : 'bg-amber-500 animate-pulse'}`} />
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] font-bold text-[#3b82f6]">{depId}</span>
+                                    <span className="text-[10px] font-bold text-[#1e293b] uppercase tracking-tight">{depTicket.subject}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <StatusBadge status={depTicket.status} />
+                                    {depTicket.status === 'RESOLVED' || depTicket.status === 'CLOSED' ? (
+                                      <span className="text-[8px] font-bold text-[#10b981] uppercase">Blocker Cleared</span>
+                                    ) : (
+                                      <span className="text-[8px] font-bold text-amber-600 uppercase">Awaiting Resolution</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <button 
+                                onClick={() => toggleDependency(selectedTicket.id, depId)}
+                                className="p-1 text-[#94a3b8] hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
+                              >
+                                <PlusCircle className="w-4 h-4 rotate-45" />
+                              </button>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="py-4 text-center">
+                          <p className="text-[10px] text-[#94a3b8] font-medium italic">No active dependencies linked to this case.</p>
+                          <p className="text-[8px] text-[#cbd5e1] mt-1 font-bold uppercase tracking-widest">Add blockers above to enforce execution order</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dependent Tickets Section */}
+                {tickets.filter(t => t.dependencyIds?.includes(selectedTicket.id)).length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="card-label">Dependent Tickets</h4>
+                      <span className="text-[9px] font-bold text-rose-500 uppercase tracking-widest">Blocked by this Case</span>
+                    </div>
+                    <div className="space-y-2">
+                       {tickets.filter(t => t.dependencyIds?.includes(selectedTicket.id)).map(dep => (
+                         <div key={dep.id} className="flex items-center justify-between p-3 bg-white border border-[#e2e8f0] rounded-lg shadow-sm">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500">
+                                <AlertCircle className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[9px] font-bold text-rose-500">{dep.id}</span>
+                                  <span className="text-[10px] font-bold text-[#1e293b] uppercase tracking-tight">{dep.subject}</span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <StatusBadge status={dep.status} />
+                                  <span className="text-[8px] font-bold text-[#64748b] uppercase">Will be unblocked upon resolution</span>
+                                </div>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => setSelectedTicket(dep)}
+                              className="text-[9px] font-bold text-[#3b82f6] uppercase hover:underline"
+                            >
+                              View Ticket
+                            </button>
+                         </div>
+                       ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Rating & Feedback Section */}
                 {(selectedTicket.status === 'RESOLVED' || selectedTicket.status === 'CLOSED') && (
@@ -2656,6 +2912,21 @@ function AdminDashboardView({ stats, statusData, chartData, agentPerformanceData
 }) {
   const activeAgents = allUsers.filter(u => u.role === 'AGENT');
   const [showEmailHub, setShowEmailHub] = useState(false);
+  const [emailSearchQuery, setEmailSearchQuery] = useState('');
+  const [emailTypeFilter, setEmailTypeFilter] = useState('ALL');
+
+  const filteredEmailLogs = useMemo(() => {
+    return emailLogs.filter(log => {
+      const searchLower = emailSearchQuery.toLowerCase();
+      const matchSearch = emailSearchQuery === '' || 
+        log.recipient.toLowerCase().includes(searchLower) || 
+        log.subject.toLowerCase().includes(searchLower);
+      
+      const matchType = emailTypeFilter === 'ALL' || log.type === emailTypeFilter;
+
+      return matchSearch && matchType;
+    });
+  }, [emailLogs, emailSearchQuery, emailTypeFilter]);
   
   return (
     <motion.div 
@@ -2697,26 +2968,67 @@ function AdminDashboardView({ stats, statusData, chartData, agentPerformanceData
             exit={{ opacity: 0, x: -20 }}
             className="bg-white p-6 rounded-xl border border-[#e2e8f0] shadow-sm"
           >
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col lg:flex-row items-center justify-between mb-6 gap-4">
               <div>
                 <h3 className="card-label">Communication Ledger</h3>
                 <h3 className="text-sm font-bold text-[#0f172a]">Recent Email Dispatches</h3>
               </div>
-              <div className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest">
-                Total Logs: {emailLogs.length}
+              
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                  <input 
+                    type="text"
+                    placeholder="Search recipient or subject..."
+                    value={emailSearchQuery}
+                    onChange={(e) => setEmailSearchQuery(e.target.value)}
+                    className="bg-[#f8fafc] border border-[#e2e8f0] rounded-lg pl-9 pr-4 py-1.5 text-[10px] font-bold text-[#1e293b] outline-none focus:ring-1 focus:ring-[#3b82f6] w-64 placeholder-[#94a3b8] uppercase tracking-wider transition-all"
+                  />
+                </div>
+
+                <select 
+                  value={emailTypeFilter}
+                  onChange={(e) => setEmailTypeFilter(e.target.value)}
+                  className="bg-[#f8fafc] border border-[#e2e8f0] rounded-lg px-3 py-1.5 text-[10px] font-bold text-[#1e293b] outline-none focus:ring-1 focus:ring-[#3b82f6] uppercase tracking-wider cursor-pointer"
+                >
+                  <option value="ALL">All Event Types</option>
+                  <option value="TICKET_CREATED">Ticket Created</option>
+                  <option value="TICKET_ASSIGNED">Ticket Assigned</option>
+                  <option value="TICKET_RESOLVED">Ticket Resolved</option>
+                  <option value="STATUS_UPDATE">Status Update</option>
+                  <option value="ESCALATION">Escalation</option>
+                </select>
+
+                {(emailSearchQuery !== '' || emailTypeFilter !== 'ALL') && (
+                  <button 
+                    onClick={() => {
+                      setEmailSearchQuery('');
+                      setEmailTypeFilter('ALL');
+                    }}
+                    className="text-[10px] font-bold text-[#ef4444] uppercase tracking-wider hover:underline px-2"
+                  >
+                    Reset
+                  </button>
+                )}
+
+                <div className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest pl-2 border-l border-[#e2e8f0]">
+                  Results: {filteredEmailLogs.length}
+                </div>
               </div>
             </div>
             
             <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-              {emailLogs.length === 0 ? (
+              {filteredEmailLogs.length === 0 ? (
                 <div className="py-20 text-center">
                   <div className="w-16 h-16 bg-[#f8fafc] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#e2e8f0] text-[#94a3b8]">
                     <Bell className="w-8 h-8 opacity-20" />
                   </div>
-                  <p className="text-[11px] font-bold text-[#94a3b8] uppercase tracking-widest">No communications recorded yet</p>
+                  <p className="text-[11px] font-bold text-[#94a3b8] uppercase tracking-widest">
+                    {emailLogs.length === 0 ? 'No communications recorded yet' : 'No matches found for active filters'}
+                  </p>
                 </div>
               ) : (
-                emailLogs.map(log => (
+                filteredEmailLogs.map(log => (
                   <div key={log.id} className="p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] group hover:border-[#3b82f6] transition-all">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-center gap-3">
