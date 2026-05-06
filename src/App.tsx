@@ -132,7 +132,7 @@ const INITIAL_TICKETS: SupportTicket[] = [
     priority: 'MEDIUM', 
     createdAt: '2024-03-21T14:30:00Z',
     category: 'Billing',
-    dependencyIds: [],
+    dependencyIds: ['T-1001'],
     history: [
       { id: 'h4', action: 'Ticket Created', user: 'Casey Smith', timestamp: '2024-03-21T14:30:00Z', type: 'creation' }
     ]
@@ -168,6 +168,7 @@ const INITIAL_TICKETS: SupportTicket[] = [
     priority: 'URGENT', 
     createdAt: '2024-03-22T11:20:00Z',
     category: 'Performance',
+    dependencyIds: ['T-1001', 'T-1002'],
     history: [
       { id: 'h8', action: 'Ticket Created', user: 'Casey Smith', timestamp: '2024-03-22T11:20:00Z', type: 'creation' },
       { id: 'h9', action: 'Assigned to Sam Rivera', user: 'System', timestamp: '2024-03-22T11:25:00Z', type: 'assignment' }
@@ -622,9 +623,37 @@ export default function App() {
     );
   };
 
+  const isCircularDependency = (targetTicketId: string, newDependencyId: string): boolean => {
+    const checkRecursive = (currentId: string, idToFind: string, visited: Set<string>): boolean => {
+      if (currentId === idToFind) return true;
+      if (visited.has(currentId)) return false;
+      visited.add(currentId);
+
+      const ticket = tickets.find(t => t.id === currentId);
+      if (!ticket || !ticket.dependencyIds) return false;
+
+      return ticket.dependencyIds.some(depId => checkRecursive(depId, idToFind, visited));
+    };
+
+    return checkRecursive(newDependencyId, targetTicketId, new Set<string>());
+  };
+
   const toggleDependency = (targetTicketId: string, dependencyId: string) => {
     // Prevent self-dependency
     if (targetTicketId === dependencyId) return;
+
+    // Check for circular dependency if adding
+    const targetTicket = tickets.find(t => t.id === targetTicketId);
+    const isAdding = !targetTicket?.dependencyIds?.includes(dependencyId);
+    
+    if (isAdding && isCircularDependency(targetTicketId, dependencyId)) {
+      setNotification({ 
+        message: 'CIRCULAR DEPENDENCY DETECTED: CANNOT CREATE RECURSIVE BLOCKS', 
+        type: 'alert' 
+      });
+      setTimeout(() => setNotification(null), 5000);
+      return;
+    }
 
     setTickets(prev => {
       const updated = prev.map(t => {
@@ -1690,10 +1719,18 @@ export default function App() {
                             </div>
                             <div className="flex items-center gap-2">
                               <p className="text-[11px] text-[#64748b] line-clamp-1">{t.description}</p>
-                              {getBlockers(t).length > 0 && (
-                                <span className="bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded text-[8px] font-bold border border-amber-100 uppercase tracking-tighter flex items-center gap-1">
-                                  <Clock className="w-2.5 h-2.5" /> Blocked
-                                </span>
+                              {t.dependencyIds && t.dependencyIds.length > 0 && (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {getBlockers(t).length > 0 ? (
+                                    <span className="bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded text-[8px] font-bold border border-amber-100 uppercase tracking-tighter flex items-center gap-1">
+                                      <Clock className="w-2.5 h-2.5" /> Blocked by {t.dependencyIds.length}
+                                    </span>
+                                  ) : (
+                                    <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[8px] font-bold border border-emerald-100 uppercase tracking-tighter shadow-sm">
+                                      Blockers Cleared
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -2202,12 +2239,20 @@ export default function App() {
                                   </div>
                                 </div>
                               </div>
-                              <button 
-                                onClick={() => toggleDependency(selectedTicket.id, depId)}
-                                className="p-1 text-[#94a3b8] hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
-                              >
-                                <PlusCircle className="w-4 h-4 rotate-45" />
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => setSelectedTicket(depTicket)}
+                                  className="text-[9px] font-bold text-[#3b82f6] uppercase hover:underline px-2"
+                                >
+                                  View
+                                </button>
+                                <button 
+                                  onClick={() => toggleDependency(selectedTicket.id, depId)}
+                                  className="p-1 text-[#94a3b8] hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all border border-transparent hover:border-rose-100 rounded"
+                                >
+                                  <PlusCircle className="w-4 h-4 rotate-45" />
+                                </button>
+                              </div>
                             </div>
                           );
                         })
