@@ -242,10 +242,10 @@ export default function App() {
 
       if (blockedTickets.length > 0) {
         setNotification({ 
-          message: `BULK OPERATION PARTIALLY BLOCKED: ${blockedTickets.length} TICKET(S) HAVE UNRESOLVED DEPENDENCIES`, 
+          message: `GUARD ENFORCED: ${blockedTickets.length} ticket(s) cannot be resolved due to active blockers. Processing valid tickets only.`, 
           type: 'alert' 
         });
-        setTimeout(() => setNotification(null), 5000);
+        setTimeout(() => setNotification(null), 6000);
         // We can either stop the whole operation or filter them out.
         // Let's filter them out and proceed with the rest.
       }
@@ -361,7 +361,7 @@ export default function App() {
     }
   };
 
-  const handleCreateTicket = (subject: string, category: string, priority: SupportTicket['priority'], description: string) => {
+  const handleCreateTicket = (subject: string, category: string, priority: SupportTicket['priority'], description: string, dependencyIds: string[] = []) => {
     const timestamp = new Date().toISOString();
     const newTicket: SupportTicket = {
       id: `T-${1000 + tickets.length + 1}`,
@@ -373,6 +373,7 @@ export default function App() {
       priority,
       createdAt: timestamp,
       category,
+      dependencyIds,
       history: [
         { id: Math.random().toString(36).substr(2, 9), action: 'Ticket Created', user: user?.name || 'Anonymous', timestamp, type: 'creation' }
       ]
@@ -687,10 +688,10 @@ export default function App() {
       const blockers = getBlockers(ticket);
       if (blockers.length > 0) {
         setNotification({ 
-          message: `CANNOT CLOSE: BLOCKED BY ${blockers.length} TICKET(S) (${blockers.map(b => b.id).join(', ')})`, 
+          message: `ACTION DENIED: ${ticket.id} is currently BLOCKED by ${blockers.length} unresolved case(s): ${blockers.map(b => b.id).join(', ')}. Please resolve blockers before finalizing.`, 
           type: 'alert' 
         });
-        setTimeout(() => setNotification(null), 5000);
+        setTimeout(() => setNotification(null), 6000);
         return;
       }
     }
@@ -1717,21 +1718,28 @@ export default function App() {
                               <span className="text-[9px] bg-[#f1f5f9] px-1.5 py-0.5 rounded text-[#64748b] font-bold uppercase">{t.id}</span>
                               <h4 className="text-sm font-bold text-[#0f172a]">{t.subject}</h4>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <p className="text-[11px] text-[#64748b] line-clamp-1">{t.description}</p>
-                              {t.dependencyIds && t.dependencyIds.length > 0 && (
-                                <div className="flex items-center gap-1 shrink-0">
-                                  {getBlockers(t).length > 0 ? (
-                                    <span className="bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded text-[8px] font-bold border border-amber-100 uppercase tracking-tighter flex items-center gap-1">
-                                      <Clock className="w-2.5 h-2.5" /> Blocked by {t.dependencyIds.length}
-                                    </span>
-                                  ) : (
-                                    <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded text-[8px] font-bold border border-emerald-100 uppercase tracking-tighter shadow-sm">
-                                      Blockers Cleared
-                                    </span>
-                                  )}
-                                </div>
-                              )}
+                              <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                                {t.dependencyIds && t.dependencyIds.length > 0 && (
+                                  <div className="flex items-center gap-1">
+                                    {getBlockers(t).length > 0 ? (
+                                      <span className="bg-amber-50 text-amber-600 px-1.5 py-1 rounded text-[8px] font-bold border border-amber-100 uppercase tracking-tighter flex items-center gap-1">
+                                        <Clock className="w-2.5 h-2.5" /> Blocked by {t.dependencyIds.length}
+                                      </span>
+                                    ) : (
+                                      <span className="bg-emerald-50 text-emerald-600 px-1.5 py-1 rounded text-[8px] font-bold border border-emerald-100 uppercase tracking-tighter shadow-sm flex items-center gap-1">
+                                        <CheckCircle2 className="w-2.5 h-2.5" /> Ready
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                {tickets.some(other => other.dependencyIds?.includes(t.id)) && (
+                                  <span className="bg-rose-50 text-rose-600 px-1.5 py-1 rounded text-[8px] font-bold border border-rose-100 uppercase tracking-tighter flex items-center gap-1">
+                                    <AlertCircle className="w-2.5 h-2.5" /> Is Blocker
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -2215,26 +2223,36 @@ export default function App() {
                       )}
                     </div>
                     
-                    <div className="p-4 space-y-2">
+                    <div className="p-4 space-y-3 relative pr-6">
+                      {/* Connection Line */}
+                      {selectedTicket.dependencyIds && selectedTicket.dependencyIds.length > 1 && (
+                        <div className="absolute left-[27px] top-6 bottom-12 w-[1.5px] bg-gradient-to-b from-amber-200 to-[#e2e8f0]" />
+                      )}
+                      
                       {selectedTicket.dependencyIds && selectedTicket.dependencyIds.length > 0 ? (
                         selectedTicket.dependencyIds.map(depId => {
                           const depTicket = tickets.find(t => t.id === depId);
                           if (!depTicket) return null;
+                          const isCleared = depTicket.status === 'RESOLVED' || depTicket.status === 'CLOSED';
                           return (
-                            <div key={depId} className="flex items-center justify-between p-3 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg group">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-2 h-2 rounded-full ${depTicket.status === 'RESOLVED' || depTicket.status === 'CLOSED' ? 'bg-[#10b981]' : 'bg-amber-500 animate-pulse'}`} />
+                            <div key={depId} className="flex items-center justify-between p-3 bg-white border border-[#e2e8f0] rounded-xl group relative z-10 hover:border-amber-200 transition-colors shadow-sm">
+                              <div className="flex items-center gap-4">
+                                <div className={`w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm shrink-0 ${isCleared ? 'bg-[#10b981]' : 'bg-amber-500 animate-pulse'}`} />
                                 <div>
                                   <div className="flex items-center gap-2">
-                                    <span className="text-[9px] font-bold text-[#3b82f6]">{depId}</span>
-                                    <span className="text-[10px] font-bold text-[#1e293b] uppercase tracking-tight">{depTicket.subject}</span>
+                                    <span className="text-[9px] font-bold text-[#3b82f6] px-1.5 py-0.5 bg-[#3b82f6]/5 rounded">{depId}</span>
+                                    <span className={`text-[10px] font-bold uppercase tracking-tight ${isCleared ? 'text-[#64748b] line-through' : 'text-[#1e293b]'}`}>{depTicket.subject}</span>
                                   </div>
-                                  <div className="flex items-center gap-2 mt-0.5">
+                                  <div className="flex items-center gap-2 mt-1">
                                     <StatusBadge status={depTicket.status} />
-                                    {depTicket.status === 'RESOLVED' || depTicket.status === 'CLOSED' ? (
-                                      <span className="text-[8px] font-bold text-[#10b981] uppercase">Blocker Cleared</span>
+                                    {isCleared ? (
+                                      <span className="text-[8px] font-bold text-[#10b981] uppercase flex items-center gap-1">
+                                        <CheckCircle2 className="w-2.5 h-2.5" /> Path Unlocked
+                                      </span>
                                     ) : (
-                                      <span className="text-[8px] font-bold text-amber-600 uppercase">Awaiting Resolution</span>
+                                      <span className="text-[8px] font-bold text-amber-600 uppercase flex items-center gap-1">
+                                        <Clock className="w-2.5 h-2.5" /> Active Blocker
+                                      </span>
                                     )}
                                   </div>
                                 </div>
@@ -2242,13 +2260,14 @@ export default function App() {
                               <div className="flex items-center gap-2">
                                 <button 
                                   onClick={() => setSelectedTicket(depTicket)}
-                                  className="text-[9px] font-bold text-[#3b82f6] uppercase hover:underline px-2"
+                                  className="text-[9px] font-bold text-[#3b82f6] uppercase tracking-wider bg-[#3b82f6]/5 hover:bg-[#3b82f6]/10 px-3 py-1.5 rounded-lg transition-all"
                                 >
-                                  View
+                                  View Context
                                 </button>
                                 <button 
                                   onClick={() => toggleDependency(selectedTicket.id, depId)}
-                                  className="p-1 text-[#94a3b8] hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all border border-transparent hover:border-rose-100 rounded"
+                                  className="p-1.5 text-[#94a3b8] hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all border border-transparent hover:border-rose-100 rounded-lg hover:bg-rose-50"
+                                  title="Unlink Dependency"
                                 >
                                   <PlusCircle className="w-4 h-4 rotate-45" />
                                 </button>
@@ -2549,6 +2568,7 @@ export default function App() {
             <ModalContent
               onClose={() => setIsAddingTicket(false)}
               onSubmit={handleCreateTicket}
+              tickets={tickets}
             />
           </motion.div>
         )}
@@ -2758,73 +2778,148 @@ export default function App() {
   );
 }
 
-function ModalContent({ onClose, onSubmit }: { onClose: () => void, onSubmit: (subject: string, category: string, priority: SupportTicket['priority'], description: string) => void }) {
+function ModalContent({ onClose, onSubmit, tickets }: { 
+  onClose: () => void, 
+  onSubmit: (subject: string, category: string, priority: SupportTicket['priority'], description: string, dependencyIds: string[]) => void,
+  tickets: SupportTicket[]
+}) {
   const [subject, setSubject] = useState('');
   const [category, setCategory] = useState('Technical Support');
   const [priority, setPriority] = useState<SupportTicket['priority']>('MEDIUM');
   const [description, setDescription] = useState('');
+  const [selectedDependencies, setSelectedDependencies] = useState<string[]>([]);
+  const [depSearch, setDepSearch] = useState('');
+
+  const toggleDependency = (id: string) => {
+    setSelectedDependencies(prev => 
+      prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]
+    );
+  };
 
   return (
     <motion.div 
       initial={{ y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: 20, opacity: 0 }}
-      className="bg-white w-full max-w-xl rounded-xl shadow-2xl overflow-hidden p-10 border border-[#e2e8f0]"
+      className="bg-white w-full max-w-xl rounded-xl shadow-2xl overflow-hidden p-10 border border-[#e2e8f0] flex flex-col max-h-[90vh]"
       onClick={(e) => e.stopPropagation()}
     >
-      <h2 className="text-xl font-bold text-[#0f172a] mb-1">New Service Ticket</h2>
-      <p className="text-[11px] text-[#64748b] mb-8 font-medium uppercase tracking-wider">Exercise 2: System Interaction</p>
-      
-      <div className="space-y-6">
-        <div>
-          <label className="card-label block mb-2">Subject</label>
-          <input 
-            type="text" 
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="e.g. Protocol Timeout Error"
-            className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none text-[#1e293b] placeholder-[#94a3b8]"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-6">
+      <div className="overflow-y-auto pr-2 custom-scrollbar">
+        <h2 className="text-xl font-bold text-[#0f172a] mb-1">New Service Ticket</h2>
+        <p className="text-[11px] text-[#64748b] mb-8 font-medium uppercase tracking-wider">Formal Ticket Registration</p>
+        
+        <div className="space-y-6">
           <div>
-            <label className="card-label block mb-2">Category</label>
-            <select 
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none text-[#1e293b] appearance-none cursor-pointer"
-            >
-              <option>Technical Support</option>
-              <option>Billing Issue</option>
-              <option>Account Sync</option>
-              <option>Other</option>
-            </select>
+            <label className="card-label block mb-2">Subject</label>
+            <input 
+              type="text" 
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="e.g. Protocol Timeout Error"
+              className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none text-[#1e293b] placeholder-[#94a3b8]"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="card-label block mb-2">Category</label>
+              <select 
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none text-[#1e293b] appearance-none cursor-pointer"
+              >
+                <option>Technical Support</option>
+                <option>Billing Issue</option>
+                <option>Account Sync</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="card-label block mb-2">Priority</label>
+              <select 
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as SupportTicket['priority'])}
+                className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none text-[#1e293b] appearance-none cursor-pointer"
+              >
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+                <option value="URGENT">Urgent</option>
+              </select>
+            </div>
           </div>
           <div>
-            <label className="card-label block mb-2">Priority</label>
-            <select 
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as SupportTicket['priority'])}
-              className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none text-[#1e293b] appearance-none cursor-pointer"
-            >
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-              <option value="URGENT">Urgent</option>
-            </select>
+            <label className="card-label block mb-2">Detailed Case Notes</label>
+            <textarea 
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the technical constraints..."
+              className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none resize-none text-[#1e293b] placeholder-[#94a3b8]"
+            />
+          </div>
+
+          <div className="pt-4 border-t border-[#f1f5f9]">
+            <label className="card-label block mb-2">Link Source Dependencies (Optional)</label>
+            <div className="relative mb-4">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+              <input 
+                type="text"
+                value={depSearch}
+                onChange={(e) => setDepSearch(e.target.value)}
+                placeholder="Search for blockers..."
+                className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg pl-9 p-3 text-[11px] font-bold uppercase tracking-wider focus:ring-1 focus:ring-[#3b82f6] outline-none text-[#1e293b] placeholder-[#94a3b8]"
+              />
+              
+              {depSearch && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-[#e2e8f0] rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                  {tickets
+                    .filter(t => !selectedDependencies.includes(t.id) && (t.id.toLowerCase().includes(depSearch.toLowerCase()) || t.subject.toLowerCase().includes(depSearch.toLowerCase())))
+                    .map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => {
+                          toggleDependency(t.id);
+                          setDepSearch('');
+                        }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-[#f8fafc] border-b last:border-0 border-[#f1f5f9] flex items-center justify-between group"
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-[9px] font-bold text-[#3b82f6]">{t.id}</span>
+                          <span className="text-[11px] font-bold text-[#1e293b] uppercase tracking-tighter">{t.subject}</span>
+                        </div>
+                        <PlusCircle className="w-4 h-4 text-[#3b82f6] opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {selectedDependencies.map(depId => {
+                const depTicket = tickets.find(t => t.id === depId);
+                return (
+                  <div key={depId} className="flex items-center gap-2 bg-[#f1f5f9] border border-[#e2e8f0] px-3 py-1.5 rounded-lg group">
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-bold text-[#3b82f6]">{depId}</span>
+                      <span className="text-[9px] font-bold text-[#475569] uppercase tracking-tighter max-w-[120px] truncate">{depTicket?.subject}</span>
+                    </div>
+                    <button 
+                      onClick={() => toggleDependency(depId)}
+                      className="p-1 text-[#94a3b8] hover:text-rose-500 transition-colors"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5 rotate-45" />
+                    </button>
+                  </div>
+                );
+              })}
+              {selectedDependencies.length === 0 && (
+                <p className="text-[10px] text-[#94a3b8] italic font-medium">No initial blockers selected.</p>
+              )}
+            </div>
           </div>
         </div>
-        <div>
-          <label className="card-label block mb-2">Detailed Case Notes</label>
-          <textarea 
-            rows={4}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe the technical constraints..."
-            className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none resize-none text-[#1e293b] placeholder-[#94a3b8]"
-          />
-        </div>
-        <div className="flex gap-4 pt-4">
+
+        <div className="flex gap-4 pt-6 mt-6 border-t border-[#f1f5f9]">
           <button 
             onClick={onClose}
             className="flex-1 py-3 bg-white border border-[#e2e8f0] text-[#64748b] rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#f8fafc] transition-all"
@@ -2833,7 +2928,7 @@ function ModalContent({ onClose, onSubmit }: { onClose: () => void, onSubmit: (s
           </button>
           <button 
             disabled={!subject || !description}
-            onClick={() => onSubmit(subject, category, priority, description)}
+            onClick={() => onSubmit(subject, category, priority, description, selectedDependencies)}
             className="flex-1 py-3 bg-[#3b82f6] text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#2563eb] transition-all shadow-sm disabled:opacity-50"
           >
             Formal Submission
