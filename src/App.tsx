@@ -915,7 +915,8 @@ export default function App() {
         name,
         assigned: agentTickets.length,
         resolved,
-        avgTime: (Math.random() * 4 + 2).toFixed(1) + 'h' // Simulated avg resolution time
+        avgTime: (Math.random() * 4 + 2).toFixed(1) + 'h', // Simulated avg resolution time
+        satisfaction: (Math.random() * 1.5 + 3.5).toFixed(1) // Simulated customer satisfaction
       };
     });
   }, [tickets, agents]);
@@ -2018,14 +2019,64 @@ export default function App() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="space-y-6"
+                className="space-y-6 pb-12"
               >
+                {/* Team Overview Bar */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white p-4 rounded-xl border border-[#e2e8f0] shadow-sm">
+                    <p className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest mb-1">Team Resolution Rate</p>
+                    <div className="flex items-end gap-2">
+                      <h4 className="text-xl font-bold text-[#1e293b]">
+                        {Math.round((tickets.filter(t => t.status === 'RESOLVED' || t.status === 'CLOSED').length / (tickets.length || 1)) * 100)}%
+                      </h4>
+                      <TrendingUp className="w-4 h-4 text-emerald-500 mb-1" />
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-[#e2e8f0] shadow-sm">
+                    <p className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest mb-1">Avg Team Satisfaction</p>
+                    <div className="flex items-end gap-2">
+                      <h4 className="text-xl font-bold text-[#3b82f6]">
+                        {(agentPerformanceData.reduce((acc, curr) => acc + parseFloat(curr.satisfaction), 0) / (agentPerformanceData.length || 1)).toFixed(2)}
+                      </h4>
+                      <Star className="w-4 h-4 text-amber-500 mb-1 fill-amber-500" />
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-[#e2e8f0] shadow-sm">
+                    <p className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest mb-1">Global Avg Response</p>
+                    <div className="flex items-end gap-2">
+                      <h4 className="text-xl font-bold text-[#1e293b]">3.2h</h4>
+                      <Clock className="w-4 h-4 text-[#94a3b8] mb-1" />
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-[#e2e8f0] shadow-sm">
+                    <p className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest mb-1">Active Agents</p>
+                    <div className="flex items-end gap-2">
+                      <h4 className="text-xl font-bold text-[#10b981]">
+                        {allUsers.filter(u => u.role === 'AGENT' && u.status === 'AVAILABLE').length}
+                      </h4>
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full mb-2 animate-pulse" />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  {/* Performance Chart */}
+                  {/* Resolution Comparison */}
                   <div className="lg:col-span-12 bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-6">
-                    <div className="mb-6">
-                      <h3 className="card-label">Performance Metrics</h3>
-                      <h3 className="text-base font-bold text-[#1e293b]">Resolved Tickets by Agent</h3>
+                    <div className="flex items-center justify-between mb-8">
+                      <div>
+                        <h3 className="card-label">Volume Analysis</h3>
+                        <h3 className="text-base font-bold text-[#1e293b]">Ticket Distribution by Agent</h3>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-[#3b82f6] rounded-full" />
+                          <span className="text-[10px] font-bold text-[#64748b] uppercase">Resolved</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-[#e2e8f0] rounded-full" />
+                          <span className="text-[10px] font-bold text-[#64748b] uppercase">Pending</span>
+                        </div>
+                      </div>
                     </div>
                     <div className="h-72">
                       <ResponsiveContainer width="100%" height="100%">
@@ -2046,7 +2097,36 @@ export default function App() {
                             cursor={{ fill: '#f8fafc' }}
                             contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontSize: '11px' }}
                           />
-                          <Bar dataKey="resolved" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={40} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
+                          <Bar dataKey="resolved" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={40} />
+                          <Bar dataKey="assigned" fill="#e2e8f0" radius={[6, 6, 0, 0]} barSize={40} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* CSAT Heatmap / Bar */}
+                  <div className="lg:col-span-12 bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-6">
+                    <div className="mb-8">
+                      <h3 className="card-label">Satisfaction Metrics</h3>
+                      <h3 className="text-base font-bold text-[#1e293b]">Customer CSAT by Agent</h3>
+                    </div>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={agentPerformanceData} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                          <XAxis type="number" domain={[0, 5]} hide />
+                          <YAxis 
+                            dataKey="name" 
+                            type="category" 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }}
+                            width={100}
+                          />
+                          <RechartsTooltip 
+                            contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '11px' }}
+                          />
+                          <Bar dataKey="satisfaction" fill="#fbbf24" radius={[0, 4, 4, 0]} barSize={20} label={{ position: 'right', fill: '#1e293b', fontSize: 10, fontWeight: 700 }} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -2055,7 +2135,7 @@ export default function App() {
                   {/* Performance Table */}
                   <div className="lg:col-span-12 bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
                     <div className="p-6 border-b border-[#e2e8f0]">
-                      <h3 className="card-label">Detailed Analysis</h3>
+                      <h3 className="card-label">Individual Report Cards</h3>
                       <h3 className="text-base font-bold text-[#1e293b]">Agent Performance Index</h3>
                     </div>
                     <div className="overflow-x-auto">
@@ -2065,8 +2145,9 @@ export default function App() {
                             <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Agent Name</th>
                             <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">Assigned</th>
                             <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">Resolved</th>
-                            <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">Resolution Rate</th>
-                            <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">Avg. Handle Time</th>
+                            <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">Effort %</th>
+                            <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">AHT</th>
+                            <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">CSAT</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#f1f5f9]">
@@ -2102,9 +2183,9 @@ export default function App() {
                                   <span className="text-[10px] font-bold text-[#1e293b]">
                                     {Math.round((agent.resolved / (agent.assigned || 1)) * 100)}%
                                   </span>
-                                  <div className="w-16 h-1 bg-[#f1f5f9] rounded-full overflow-hidden border border-[#e2e8f0]">
+                                  <div className="w-12 h-1 bg-[#f1f5f9] rounded-full overflow-hidden border border-[#e2e8f0]">
                                     <div 
-                                      className="h-full bg-[#10b981] rounded-full transition-all duration-1000" 
+                                      className="h-full bg-[#3b82f6] rounded-full transition-all duration-1000" 
                                       style={{ width: `${(agent.resolved / (agent.assigned || 1)) * 100}%` }} 
                                     />
                                   </div>
@@ -2115,6 +2196,13 @@ export default function App() {
                                   <Clock className="w-3 h-3 text-[#64748b]" />
                                   <span className="text-[10px] font-bold text-[#1e293b] font-mono">{agent.avgTime}</span>
                                 </div>
+                              </td>
+                              <td className="p-4 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Star className={`w-3 h-3 ${parseFloat(agent.satisfaction) >= 4.5 ? 'text-amber-500 fill-amber-500' : 'text-amber-400'}`} />
+                                  <span className="text-[11px] font-bold text-[#1e293b]">{agent.satisfaction}</span>
+                                </div>
+                                <p className="text-[8px] text-[#94a3b8] font-bold uppercase tracking-tighter">Rating</p>
                               </td>
                             </tr>
                           ))}
