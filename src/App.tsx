@@ -911,14 +911,16 @@ export default function App() {
     return agents.map(name => {
       const agentTickets = tickets.filter(t => t.agentName === name);
       const resolved = agentTickets.filter(t => t.status === 'RESOLVED' || t.status === 'CLOSED').length;
+      const workload = agentTickets.filter(t => t.status !== 'RESOLVED' && t.status !== 'CLOSED').length;
       return {
         name,
         assigned: agentTickets.length,
         resolved,
+        workload,
         avgTime: (Math.random() * 4 + 2).toFixed(1) + 'h', // Simulated avg resolution time
         satisfaction: (Math.random() * 1.5 + 3.5).toFixed(1) // Simulated customer satisfaction
       };
-    });
+    }).sort((a, b) => a.name.localeCompare(b.name));
   }, [tickets, agents]);
 
   const filteredTickets = useMemo(() => {
@@ -2145,6 +2147,7 @@ export default function App() {
                             <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Agent Name</th>
                             <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">Assigned</th>
                             <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">Resolved</th>
+                            <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">Workload</th>
                             <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">Effort %</th>
                             <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">AHT</th>
                             <th className="p-4 text-[10px] font-bold text-[#64748b] uppercase tracking-wider text-center">CSAT</th>
@@ -2177,6 +2180,12 @@ export default function App() {
                               </td>
                               <td className="p-4 text-center">
                                 <span className="text-[11px] font-bold text-[#10b981]">{agent.resolved}</span>
+                              </td>
+                              <td className="p-4 text-center">
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[11px] font-bold text-[#3b82f6]">{agent.workload}</span>
+                                  <span className="text-[8px] text-[#94a3b8] font-bold uppercase tracking-tighter">Active</span>
+                                </div>
                               </td>
                               <td className="p-4 text-center">
                                 <div className="flex flex-col items-center gap-1">
