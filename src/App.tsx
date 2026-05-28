@@ -30,8 +30,12 @@ import {
   Settings as SettingsIcon,
   Bell,
   Star,
-  UserPlus
+  UserPlus,
+  FileText,
+  Download
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { motion, AnimatePresence } from 'motion/react';
 
 // --- Types ---
@@ -922,6 +926,51 @@ export default function App() {
       };
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [tickets, agents]);
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    
+    // Add title
+    doc.setFontSize(20);
+    doc.setTextColor(15, 23, 42); // #0f172a
+    doc.text('Agent Performance Report', 14, 22);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139); // #64748b
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
+    
+    // Table data
+    const tableColumn = ["Agent Name", "Assigned", "Resolved", "Workload", "Effort %", "AHT", "CSAT"];
+    const tableRows = agentPerformanceData.map(agent => [
+      agent.name,
+      agent.assigned,
+      agent.resolved,
+      agent.workload,
+      `${Math.round((agent.resolved / (agent.assigned || 1)) * 100)}%`,
+      agent.avgTime,
+      agent.satisfaction
+    ]);
+
+    // Generate table
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 35,
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { top: 35 },
+    });
+
+    // Save PDF
+    doc.save(`Agent_Performance_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+    
+    setNotification({ 
+      message: 'PERFORMANCE REPORT EXPORTED SUCCESSFULLY', 
+      type: 'success' 
+    });
+    setTimeout(() => setNotification(null), 3000);
+  };
 
   const filteredTickets = useMemo(() => {
     // 1. Pre-filter by Search Command Syntax (is:, status:, @, etc.)
@@ -2136,9 +2185,18 @@ export default function App() {
 
                   {/* Performance Table */}
                   <div className="lg:col-span-12 bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
-                    <div className="p-6 border-b border-[#e2e8f0]">
-                      <h3 className="card-label">Individual Report Cards</h3>
-                      <h3 className="text-base font-bold text-[#1e293b]">Agent Performance Index</h3>
+                    <div className="p-6 border-b border-[#e2e8f0] flex items-center justify-between">
+                      <div>
+                        <h3 className="card-label">Individual Report Cards</h3>
+                        <h3 className="text-base font-bold text-[#1e293b]">Agent Performance Index</h3>
+                      </div>
+                      <button 
+                        onClick={exportToPDF}
+                        className="flex items-center gap-2 px-4 py-2 bg-[#1e293b] hover:bg-[#334155] text-white rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all shadow-sm"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Export PDF Report
+                      </button>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse">
