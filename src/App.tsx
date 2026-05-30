@@ -10,7 +10,10 @@ import {
   ResponsiveContainer, 
   PieChart, 
   Pie, 
-  Cell 
+  Cell,
+  AreaChart,
+  Area,
+  Legend
 } from 'recharts';
 import { 
   Ticket, 
@@ -927,6 +930,16 @@ export default function App() {
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [tickets, agents]);
 
+  const availabilityTrendData = useMemo(() => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    // Generate some randomized but consistent data for the last 7 days
+    return days.map(day => ({
+      name: day,
+      Available: Math.floor(Math.random() * 20 + 40),
+      OnBreak: Math.floor(Math.random() * 10 + 5),
+    }));
+  }, []);
+
   const exportToPDF = () => {
     const doc = new jsPDF();
     
@@ -1707,18 +1720,6 @@ export default function App() {
                       </select>
 
                       <select 
-                        value={filterPriority}
-                        onChange={(e) => setFilterPriority(e.target.value)}
-                        className="bg-white border border-[#e2e8f0] text-[#1e293b] text-[10px] font-bold uppercase tracking-wider rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-[#3b82f6] outline-none cursor-pointer"
-                      >
-                        <option value="ALL">All Priority</option>
-                        <option value="LOW">Low</option>
-                        <option value="MEDIUM">Medium</option>
-                        <option value="HIGH">High</option>
-                        <option value="URGENT">Urgent</option>
-                      </select>
-
-                      <select 
                         value={filterAgent}
                         onChange={(e) => setFilterAgent(e.target.value)}
                         className="bg-white border border-[#e2e8f0] text-[#1e293b] text-[10px] font-bold uppercase tracking-wider rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-[#3b82f6] outline-none cursor-pointer"
@@ -1831,6 +1832,38 @@ export default function App() {
                     </motion.div>
                   )}
                 </AnimatePresence>
+
+                {/* Priority Toggle Pills */}
+                <div className="flex flex-wrap items-center gap-2 px-1">
+                  {['ALL', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'].map(p => {
+                    const isActive = filterPriority === p;
+                    const config = {
+                      ALL: { color: 'text-slate-600', active: 'bg-slate-800 text-white border-slate-800', dot: 'bg-slate-400', label: 'All Cases' },
+                      LOW: { color: 'text-emerald-600', active: 'bg-emerald-500 text-white border-emerald-500', dot: 'bg-emerald-400', label: 'Low' },
+                      MEDIUM: { color: 'text-blue-600', active: 'bg-blue-600 text-white border-blue-600', dot: 'bg-blue-400', label: 'Medium' },
+                      HIGH: { color: 'text-amber-600', active: 'bg-amber-500 text-white border-amber-500', dot: 'bg-amber-400', label: 'High' },
+                      URGENT: { color: 'text-rose-600', active: 'bg-rose-600 text-white border-rose-600', dot: 'bg-rose-400', label: 'Urgent' }
+                    }[p as 'ALL' | SupportTicket['priority']];
+
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setFilterPriority(p)}
+                        className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all border flex items-center gap-2 shadow-sm ${
+                          isActive 
+                            ? config.active 
+                            : `bg-white ${config.color} border-[#e2e8f0] hover:border-[#cbd5e1]`
+                        }`}
+                      >
+                        <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : config.dot}`} />
+                        {config.label}
+                        <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[8px] font-black ${isActive ? 'bg-white/20' : 'bg-[#f1f5f9]'}`}>
+                          {p === 'ALL' ? tickets.length : tickets.filter(t => t.priority === p).length}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
 
                 <div className="grid grid-cols-1 gap-3">
                   {filteredTickets.length > 0 ? (
@@ -2151,6 +2184,74 @@ export default function App() {
                           <Bar dataKey="resolved" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={40} />
                           <Bar dataKey="assigned" fill="#e2e8f0" radius={[6, 6, 0, 0]} barSize={40} />
                         </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Availability Trend Chart */}
+                  <div className="lg:col-span-12 bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-6">
+                    <div className="flex items-center justify-between mb-8">
+                      <div>
+                        <h3 className="card-label">Operational Health</h3>
+                        <h3 className="text-base font-bold text-[#1e293b]">7-Day Agent Availability Trend</h3>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-[#3b82f6] rounded-full" />
+                          <span className="text-[10px] font-bold text-[#64748b] uppercase">Available Hours</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-amber-400 rounded-full" />
+                          <span className="text-[10px] font-bold text-[#64748b] uppercase">On Break</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={availabilityTrendData}>
+                          <defs>
+                            <linearGradient id="colorAvailable" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                            </linearGradient>
+                            <linearGradient id="colorOnBreak" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#fbbf24" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis 
+                            dataKey="name" 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }}
+                          />
+                          <YAxis 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{ fontSize: 10, fill: '#64748b' }}
+                            label={{ value: 'Hours', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#94a3b8', fontWeight: 700 }}
+                          />
+                          <RechartsTooltip 
+                            contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontSize: '11px' }}
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="Available" 
+                            stroke="#3b82f6" 
+                            strokeWidth={3}
+                            fillOpacity={1} 
+                            fill="url(#colorAvailable)" 
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="OnBreak" 
+                            stroke="#fbbf24" 
+                            strokeWidth={3}
+                            fillOpacity={1} 
+                            fill="url(#colorOnBreak)" 
+                          />
+                        </AreaChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
