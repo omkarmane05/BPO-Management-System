@@ -35,7 +35,8 @@ import {
   Star,
   UserPlus,
   FileText,
-  Download
+  Download,
+  Zap
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -233,6 +234,26 @@ export default function App() {
   const [escalationConfirming, setEscalationConfirming] = useState(false);
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
   const [bulkActionModal, setBulkActionModal] = useState<{ type: 'status' | 'assign', value: string } | null>(null);
+  const [isLiveMode, setIsLiveMode] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!isLiveMode) return;
+
+    const interval = setInterval(() => {
+      setLastRefreshedAt(new Date());
+      setNotification({ message: 'SYSTEM: LIVE DATA REFRESHED', type: 'success' });
+      setTimeout(() => setNotification(null), 3000);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [isLiveMode]);
 
   const toggleSelectTicket = (id: string) => {
     setSelectedTicketIds(prev => 
@@ -1279,6 +1300,30 @@ export default function App() {
                 className="bg-[#334155] border-transparent focus:bg-[#475569] transition-all rounded-lg pl-9 pr-4 py-1.5 text-xs w-48 outline-none text-white placeholder-white/40"
               />
             </div>
+            {(view === 'DASHBOARD' || view === 'TICKETS') && (
+              <div className="flex flex-col items-end gap-1">
+                <button 
+                  onClick={() => setIsLiveMode(!isLiveMode)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all border ${
+                    isLiveMode 
+                      ? 'bg-[#10b981]/10 border-[#10b981]/50 text-[#10b981]' 
+                      : 'bg-[#334155] border-transparent text-white/40 hover:text-white'
+                  }`}
+                >
+                  <div className={`w-1.5 h-1.5 rounded-full ${isLiveMode ? 'bg-[#10b981] animate-pulse' : 'bg-white/20'}`} />
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Live Mode</span>
+                  {isLiveMode && <Zap className="w-3 h-3 fill-current" />}
+                </button>
+                {isLiveMode && (
+                  <div className="flex items-center gap-1.5 px-2">
+                    <span className="text-[8px] font-bold text-white/30 uppercase tracking-tighter">Sync:</span>
+                    <span className="text-[8px] font-mono text-[#10b981] font-bold">
+                      {Math.floor((currentTime.getTime() - lastRefreshedAt.getTime()) / 1000)}s ago
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="relative">
               <button 
                 onClick={() => setShowNotifications(!showNotifications)}
