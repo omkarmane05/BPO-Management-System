@@ -1006,6 +1006,60 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  const exportTicketHistory = () => {
+    if (!selectedTicket) return;
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `Ticket-History-${selectedTicket.id}-${timestamp}`;
+    
+    // Format JSON
+    const jsonData = JSON.stringify(selectedTicket, null, 2);
+    
+    // Format Text
+    let textData = `TICKET REPORT: ${selectedTicket.id}\n`;
+    textData += `==============================\n`;
+    textData += `Subject: ${selectedTicket.subject}\n`;
+    textData += `Status: ${selectedTicket.status}\n`;
+    textData += `Priority: ${selectedTicket.priority}\n`;
+    textData += `Category: ${selectedTicket.category}\n`;
+    textData += `Customer: ${selectedTicket.customerName}\n`;
+    textData += `Agent: ${selectedTicket.agentName || 'Unassigned'}\n`;
+    textData += `Created: ${new Date(selectedTicket.createdAt).toLocaleString()}\n`;
+    textData += `Description: ${selectedTicket.description}\n\n`;
+    
+    textData += `ACTIVITY HISTORY\n`;
+    textData += `----------------\n`;
+    selectedTicket.history.forEach((h: any) => {
+      textData += `[${new Date(h.timestamp).toLocaleString()}] ${h.user}: ${h.action}\n`;
+    });
+
+    // Create blobs
+    const textBlob = new Blob([textData], { type: 'text/plain' });
+    const jsonBlob = new Blob([jsonData], { type: 'application/json' });
+
+    // Download Text version
+    const textUrl = URL.createObjectURL(textBlob);
+    const textLink = document.createElement('a');
+    textLink.href = textUrl;
+    textLink.download = `${filename}.txt`;
+    textLink.click();
+    URL.revokeObjectURL(textUrl);
+
+    // Download JSON version
+    const jsonUrl = URL.createObjectURL(jsonBlob);
+    const jsonLink = document.createElement('a');
+    jsonLink.href = jsonUrl;
+    jsonLink.download = `${filename}.json`;
+    jsonLink.click();
+    URL.revokeObjectURL(jsonUrl);
+
+    setNotification({ 
+      message: 'TICKET HISTORY EXPORTED (TEXT & JSON)', 
+      type: 'success' 
+    });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
   const filteredTickets = useMemo(() => {
     // 1. Pre-filter by Search Command Syntax (is:, status:, @, etc.)
     let baseSearch = searchQuery;
@@ -2519,12 +2573,22 @@ export default function App() {
                       <span className="text-[10px] text-[#94a3b8] font-mono border border-[#e2e8f0] px-1.5 py-0.5 rounded leading-none">{selectedTicket.id}</span>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => setSelectedTicket(null)}
-                    className="p-1 hover:bg-white rounded-lg transition-colors text-[#94a3b8] border border-transparent hover:border-[#e2e8f0]"
-                  >
-                    <PlusCircle className="w-5 h-5 rotate-45" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={exportTicketHistory}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e2e8f0] hover:border-[#3b82f6]/30 hover:bg-[#3b82f6]/5 text-[#64748b] hover:text-[#3b82f6] rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all"
+                      title="Export History (JSON & TXT)"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Export
+                    </button>
+                    <button 
+                      onClick={() => setSelectedTicket(null)}
+                      className="p-1 hover:bg-white rounded-lg transition-colors text-[#94a3b8] border border-transparent hover:border-[#e2e8f0]"
+                    >
+                      <PlusCircle className="w-5 h-5 rotate-45" />
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-4 items-center text-[11px] text-[#64748b] font-bold uppercase tracking-wider">
                   <div className="flex items-center gap-2">
