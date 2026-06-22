@@ -41,6 +41,7 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { motion, AnimatePresence } from 'motion/react';
+import HeatmapChart from './components/HeatmapChart';
 
 // --- Types ---
 
@@ -2353,6 +2354,29 @@ export default function App() {
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
+                  </div>
+
+                  {/* Performance Heatmap (D3) */}
+                  <div className="lg:col-span-12 bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-6">
+                    <div className="mb-6">
+                      <h3 className="card-label">Efficiency Distribution</h3>
+                      <h3 className="text-base font-bold text-[#1e293b]">Performance Heatmap by Category & Shift</h3>
+                    </div>
+                    <div className="flex items-center justify-end gap-4 mb-4">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 bg-[#f7fbff] border border-[#e2e8f0] rounded" />
+                        <span className="text-[10px] font-bold text-[#64748b]">Low</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 bg-[#6baed6] rounded" />
+                        <span className="text-[10px] font-bold text-[#64748b]">Med</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 bg-[#08306b] rounded" />
+                        <span className="text-[10px] font-bold text-[#64748b]">High</span>
+                      </div>
+                    </div>
+                    <HeatmapChart />
                   </div>
 
                   {/* CSAT Heatmap / Bar */}
