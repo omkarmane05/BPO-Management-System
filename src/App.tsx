@@ -5,215 +5,66 @@ import {
   Bar, 
   XAxis, 
   YAxis, 
-  CartesianGrid, 
   Tooltip as RechartsTooltip, 
   ResponsiveContainer, 
   PieChart, 
   Pie, 
   Cell,
+  Legend,
   AreaChart,
   Area,
-  Legend
+  CartesianGrid
 } from 'recharts';
 import { 
   Ticket, 
-  Users, 
   LayoutDashboard, 
   PlusCircle, 
   Clock, 
   CheckCircle2, 
   AlertCircle, 
   UserCircle, 
-  LogOut, 
   Search, 
   Filter,
   MessageSquare,
   ChevronRight,
-  TrendingUp,
-  Settings as SettingsIcon,
-  Bell,
-  Star,
-  UserPlus,
-  FileText,
-  Download,
-  Zap
+  TrendingUp, 
+  Settings as SettingsIcon, 
+  Star, 
+  Download, 
+  Zap, 
+  Users, 
+  UserPlus
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { motion, AnimatePresence } from 'motion/react';
+
+// Modules
+import { 
+  User, SupportTicket, EmailLog, AppNotification, 
+  Role, AvailabilityStatus, ViewType 
+} from './types';
+import { MOCK_USERS, INITIAL_TICKETS } from './data/mockData';
+
+// UI Components
+import { StatusBadge } from './components/ui/StatusBadge';
+import { PriorityIcon } from './components/ui/PriorityIcon';
+import { StatCard } from './components/ui/StatCard';
+import { StatusIndicator } from './components/ui/StatusIndicator';
+
+// Layout Components
+import { Sidebar } from './components/layout/Sidebar';
+import { Header } from './components/layout/Header';
+
+// View Components
+import { ProfileView } from './components/views/ProfileView';
+import { AdminDashboardView } from './components/views/AdminDashboardView';
+import { SecurityView } from './components/views/SecurityView';
+import { TicketDetailModal } from './components/modals/TicketDetailModal';
+import { AddTicketModal } from './components/modals/AddTicketModal';
+import { EscalationModal } from './components/modals/EscalationModal';
+import { BulkActionModal } from './components/modals/BulkActionModal';
 import HeatmapChart from './components/HeatmapChart';
-
-// --- Types ---
-
-type Role = 'CUSTOMER' | 'AGENT' | 'ADMIN';
-type AvailabilityStatus = 'AVAILABLE' | 'ON_BREAK' | 'OFFLINE';
-
-interface EmailLog {
-  id: string;
-  recipient: string;
-  subject: string;
-  body: string;
-  timestamp: string;
-  type: 'TICKET_CREATED' | 'TICKET_ASSIGNED' | 'TICKET_RESOLVED' | 'STATUS_UPDATE' | 'ESCALATION';
-  ticketId: string;
-}
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  avatar: string;
-  status: AvailabilityStatus;
-}
-
-interface SupportTicket {
-  id: string;
-  customerId: string;
-  customerName: string;
-  agentId?: string;
-  agentName?: string;
-  subject: string;
-  description: string;
-  status: 'NEW' | 'ASSIGNED' | 'IN_PROGRESS' | 'ON_HOLD' | 'RESOLVED' | 'CLOSED';
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-  createdAt: string;
-  category: string;
-  isEscalated?: boolean;
-  escalationReason?: string;
-  rating?: number;
-  feedback?: string;
-  dependencyIds?: string[];
-  history: {
-    id: string;
-    action: string;
-    user: string;
-    timestamp: string;
-    type: 'status' | 'assignment' | 'escalation' | 'creation';
-  }[];
-}
-
-interface AppNotification {
-  id: string;
-  ticketId: string;
-  message: string;
-  reason: string;
-  timestamp: string;
-  read: boolean;
-}
-
-// --- Mock Data ---
-
-const MOCK_USERS: User[] = [
-  { id: '1', name: 'Alex Johnson', email: 'alex@example.com', role: 'ADMIN', avatar: 'https://picsum.photos/seed/alex/100/100', status: 'AVAILABLE' },
-  { id: '2', name: 'Sam Rivera', email: 'sam@example.com', role: 'AGENT', avatar: 'https://picsum.photos/seed/sam/100/100', status: 'AVAILABLE' },
-  { id: '3', name: 'Casey Smith', email: 'casey@example.com', role: 'CUSTOMER', avatar: 'https://picsum.photos/seed/casey/100/100', status: 'AVAILABLE' },
-  { id: '4', name: 'Jordan Lee', email: 'jordan@example.com', role: 'AGENT', avatar: 'https://picsum.photos/seed/jordan/100/100', status: 'OFFLINE' },
-];
-
-const INITIAL_TICKETS: SupportTicket[] = [
-  { 
-    id: 'T-1001', 
-    customerId: '3', 
-    customerName: 'Casey Smith', 
-    agentId: '2', 
-    agentName: 'Sam Rivera', 
-    subject: 'Cannot login to my account', 
-    description: 'Keep getting 403 error when trying to access the portal.', 
-    status: 'IN_PROGRESS', 
-    priority: 'HIGH', 
-    createdAt: '2024-03-20T10:00:00Z',
-    category: 'Authentication',
-    dependencyIds: [],
-    history: [
-      { id: 'h1', action: 'Ticket Created', user: 'Casey Smith', timestamp: '2024-03-20T10:00:00Z', type: 'creation' },
-      { id: 'h2', action: 'Assigned to Sam Rivera', user: 'System', timestamp: '2024-03-20T10:05:00Z', type: 'assignment' },
-      { id: 'h3', action: 'Status changed to IN_PROGRESS', user: 'Sam Rivera', timestamp: '2024-03-20T11:00:00Z', type: 'status' }
-    ]
-  },
-  { 
-    id: 'T-1002', 
-    customerId: '3', 
-    customerName: 'Casey Smith', 
-    subject: 'Billing inquiry', 
-    description: 'I was charged twice for the last month subscription.', 
-    status: 'NEW', 
-    priority: 'MEDIUM', 
-    createdAt: '2024-03-21T14:30:00Z',
-    category: 'Billing',
-    dependencyIds: ['T-1001'],
-    history: [
-      { id: 'h4', action: 'Ticket Created', user: 'Casey Smith', timestamp: '2024-03-21T14:30:00Z', type: 'creation' }
-    ]
-  },
-  { 
-    id: 'T-1003', 
-    customerId: '3', 
-    customerName: 'Casey Smith', 
-    agentId: '4', 
-    agentName: 'Jordan Lee', 
-    subject: 'Feature request: Dark Mode', 
-    description: 'Please add dark mode support to the mobile app.', 
-    status: 'RESOLVED', 
-    priority: 'LOW', 
-    createdAt: '2024-03-18T09:15:00Z',
-    category: 'Feature Request',
-    dependencyIds: [],
-    history: [
-      { id: 'h5', action: 'Ticket Created', user: 'Casey Smith', timestamp: '2024-03-18T09:15:00Z', type: 'creation' },
-      { id: 'h6', action: 'Assigned to Jordan Lee', user: 'System', timestamp: '2024-03-18T10:00:00Z', type: 'assignment' },
-      { id: 'h7', action: 'Resolved successfully', user: 'Jordan Lee', timestamp: '2024-03-19T16:00:00Z', type: 'status' }
-    ]
-  },
-  { 
-    id: 'T-1004', 
-    customerId: '3', 
-    customerName: 'Casey Smith', 
-    agentId: '2', 
-    agentName: 'Sam Rivera', 
-    subject: 'Slow API response times', 
-    description: 'Endpoints are taking > 2 seconds to respond today.', 
-    status: 'ON_HOLD', 
-    priority: 'URGENT', 
-    createdAt: '2024-03-22T11:20:00Z',
-    category: 'Performance',
-    dependencyIds: ['T-1001', 'T-1002'],
-    history: [
-      { id: 'h8', action: 'Ticket Created', user: 'Casey Smith', timestamp: '2024-03-22T11:20:00Z', type: 'creation' },
-      { id: 'h9', action: 'Assigned to Sam Rivera', user: 'System', timestamp: '2024-03-22T11:25:00Z', type: 'assignment' }
-    ]
-  },
-];
-
-// --- Components ---
-
-const StatusBadge = ({ status }: { status: SupportTicket['status'] }) => {
-  const colors: Record<SupportTicket['status'], string> = {
-    NEW: 'bg-blue-100 text-blue-700 border-blue-200',
-    ASSIGNED: 'bg-purple-100 text-purple-700 border-purple-200',
-    IN_PROGRESS: 'bg-amber-100 text-amber-700 border-amber-200',
-    ON_HOLD: 'bg-gray-100 text-gray-700 border-gray-200',
-    RESOLVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    CLOSED: 'bg-rose-100 text-rose-700 border-rose-200',
-  };
-
-  return (
-    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${colors[status]}`}>
-      {status.replace('_', ' ')}
-    </span>
-  );
-};
-
-const PriorityIcon = ({ priority }: { priority: SupportTicket['priority'] }) => {
-  const colors: Record<SupportTicket['priority'], string> = {
-    LOW: 'text-gray-400',
-    MEDIUM: 'text-blue-500',
-    HIGH: 'text-orange-500',
-    URGENT: 'text-red-600',
-  };
-
-  return <AlertCircle className={`w-4 h-4 ${colors[priority]}`} />;
-};
 
 // --- Main App Component ---
 
@@ -769,6 +620,44 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  const handleAddTicket = (subject: string, category: string, priority: SupportTicket['priority'], description: string, dependencyIds: string[]) => {
+    const timestamp = new Date().toISOString();
+    const newTicket: SupportTicket = {
+      id: `TKT-${Math.floor(1000 + Math.random() * 9000)}`,
+      subject,
+      description,
+      category,
+      priority,
+      status: 'NEW',
+      customerId: user?.id || 'CUST-001',
+      customerName: user?.name || 'Walk-in Customer',
+      createdAt: timestamp,
+      dependencyIds: dependencyIds,
+      history: [
+        {
+          id: Math.random().toString(36).substr(2, 9),
+          action: 'Ticket Created',
+          user: user?.name || 'System',
+          timestamp,
+          type: 'creation'
+        }
+      ]
+    };
+
+    setTickets(prev => [newTicket, ...prev]);
+    setIsAddingTicket(false);
+    setNotification({ message: 'TICKET CREATED SUCCESSFULLY', type: 'success' });
+    setTimeout(() => setNotification(null), 3000);
+
+    sendSimulatedEmail({
+      recipient: user?.email || 'admin@bpo.com',
+      subject: `Ticket Created: ${newTicket.id}`,
+      body: `Hello ${user?.name},\n\nYour support ticket has been created successfully.\nTicket ID: ${newTicket.id}\nSubject: ${newTicket.subject}`,
+      type: 'TICKET_CREATED',
+      ticketId: newTicket.id
+    });
+  };
+
   const handleUserStatusUpdate = (status: AvailabilityStatus) => {
     if (!user) return;
     const prevStatus = user.status;
@@ -1007,60 +896,6 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const exportTicketHistory = () => {
-    if (!selectedTicket) return;
-    
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `Ticket-History-${selectedTicket.id}-${timestamp}`;
-    
-    // Format JSON
-    const jsonData = JSON.stringify(selectedTicket, null, 2);
-    
-    // Format Text
-    let textData = `TICKET REPORT: ${selectedTicket.id}\n`;
-    textData += `==============================\n`;
-    textData += `Subject: ${selectedTicket.subject}\n`;
-    textData += `Status: ${selectedTicket.status}\n`;
-    textData += `Priority: ${selectedTicket.priority}\n`;
-    textData += `Category: ${selectedTicket.category}\n`;
-    textData += `Customer: ${selectedTicket.customerName}\n`;
-    textData += `Agent: ${selectedTicket.agentName || 'Unassigned'}\n`;
-    textData += `Created: ${new Date(selectedTicket.createdAt).toLocaleString()}\n`;
-    textData += `Description: ${selectedTicket.description}\n\n`;
-    
-    textData += `ACTIVITY HISTORY\n`;
-    textData += `----------------\n`;
-    selectedTicket.history.forEach((h: any) => {
-      textData += `[${new Date(h.timestamp).toLocaleString()}] ${h.user}: ${h.action}\n`;
-    });
-
-    // Create blobs
-    const textBlob = new Blob([textData], { type: 'text/plain' });
-    const jsonBlob = new Blob([jsonData], { type: 'application/json' });
-
-    // Download Text version
-    const textUrl = URL.createObjectURL(textBlob);
-    const textLink = document.createElement('a');
-    textLink.href = textUrl;
-    textLink.download = `${filename}.txt`;
-    textLink.click();
-    URL.revokeObjectURL(textUrl);
-
-    // Download JSON version
-    const jsonUrl = URL.createObjectURL(jsonBlob);
-    const jsonLink = document.createElement('a');
-    jsonLink.href = jsonUrl;
-    jsonLink.download = `${filename}.json`;
-    jsonLink.click();
-    URL.revokeObjectURL(jsonUrl);
-
-    setNotification({ 
-      message: 'TICKET HISTORY EXPORTED (TEXT & JSON)', 
-      type: 'success' 
-    });
-    setTimeout(() => setNotification(null), 3000);
-  };
-
   const filteredTickets = useMemo(() => {
     // 1. Pre-filter by Search Command Syntax (is:, status:, @, etc.)
     let baseSearch = searchQuery;
@@ -1194,264 +1029,29 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#f8fafc] flex font-sans text-[#1e293b]">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-[#e2e8f0] flex flex-col hidden md:flex">
-        <div className="p-6 flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#3b82f6] rounded-lg flex items-center justify-center text-white shadow-sm">
-            <Ticket className="w-4 h-4" />
-          </div>
-          <div>
-            <h2 className="font-bold text-[#0f172a] text-sm tracking-tight leading-none mb-1">BPO Connect</h2>
-            <p className="text-[9px] uppercase tracking-wider text-[#64748b] font-bold">{user.role} PORTAL</p>
-          </div>
-        </div>
-
-        <nav className="flex-1 px-3 space-y-1 mt-2">
-          {user.role === 'ADMIN' ? (
-            <MenuButton 
-              active={view === 'ADMIN_DASHBOARD'} 
-              onClick={() => setView('ADMIN_DASHBOARD')}
-              icon={<LayoutDashboard className="w-4 h-4" />}
-              label="Admin Dashboard"
-            />
-          ) : (
-            <MenuButton 
-              active={view === 'DASHBOARD'} 
-              onClick={() => setView('DASHBOARD')}
-              icon={<LayoutDashboard className="w-4 h-4" />}
-              label="Overview"
-            />
-          )}
-          
-          <MenuButton 
-            active={view === 'TICKETS'} 
-            onClick={() => setView('TICKETS')}
-            icon={<Ticket className="w-4 h-4" />}
-            label="Tickets"
-          />
-          {user.role === 'ADMIN' && (
-            <MenuButton 
-              active={view === 'USERS'} 
-              onClick={() => setView('USERS')}
-              icon={<Users className="w-4 h-4" />}
-              label="Staff Management"
-            />
-          )}
-          <MenuButton 
-            active={view === 'REPORTS'} 
-            onClick={() => setView('REPORTS')}
-            icon={<TrendingUp className="w-4 h-4" />}
-            label="Analytics"
-          />
-          <MenuButton 
-            active={view === 'PROFILE'} 
-            onClick={() => setView('PROFILE')}
-            icon={<UserCircle className="w-4 h-4" />}
-            label="My Profile"
-          />
-        </nav>
-
-        <div className="p-3 mt-auto space-y-3">
-          <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[9px] font-bold text-[#94a3b8] uppercase tracking-widest">Git History</span>
-              <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-[#1e293b] rounded flex items-center justify-center text-white">
-                <span className="text-[10px] font-bold font-mono">05</span>
-              </div>
-              <div className="flex-1">
-                <p className="text-[10px] font-bold text-[#1e293b] leading-tight">Master Branch</p>
-                <p className="text-[9px] text-[#64748b]">5 Validated Commits</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-[#f8fafc] rounded-xl p-3 border border-[#e2e8f0]">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="relative">
-                <img src={user.avatar} className="w-8 h-8 rounded-lg border border-[#e2e8f0] shadow-sm" alt={user.name} referrerPolicy="no-referrer" />
-                <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white shadow-sm ${
-                  user.status === 'AVAILABLE' ? 'bg-emerald-500' :
-                  user.status === 'ON_BREAK' ? 'bg-amber-500' : 'bg-gray-400'
-                }`} />
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <p className="text-xs font-bold truncate text-[#0f172a] leading-none mb-1">{user.name}</p>
-                <div className="flex items-center gap-1">
-                  <span className={`w-1 h-1 rounded-full ${
-                    user.status === 'AVAILABLE' ? 'bg-emerald-500' :
-                    user.status === 'ON_BREAK' ? 'bg-amber-500' : 'bg-gray-400'
-                  }`} />
-                  <p className="text-[9px] text-[#64748b] truncate uppercase font-bold tracking-tighter">{user.status.replace('_', ' ')}</p>
-                </div>
-              </div>
-            </div>
-
-            {user.role === 'AGENT' && (
-              <div className="mb-3 space-y-1">
-                <p className="text-[8px] font-bold text-[#94a3b8] uppercase tracking-widest pl-1 mb-1">Set Availability</p>
-                <div className="grid grid-cols-3 gap-1">
-                  {(['AVAILABLE', 'ON_BREAK', 'OFFLINE'] as AvailabilityStatus[]).map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => handleUserStatusUpdate(s)}
-                      className={`py-1 rounded text-[8px] font-bold transition-all border ${
-                        user.status === s 
-                          ? 'bg-[#3b82f6] text-white border-[#3b82f6] shadow-sm' 
-                          : 'bg-white text-[#64748b] border-[#e2e8f0] hover:border-[#cbd5e1]'
-                      }`}
-                    >
-                      {s === 'ON_BREAK' ? 'BREAK' : s.replace('AVAILABLE', 'ONLINE').replace('OFFLINE', 'OFF')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <button 
-              onClick={handleLogout}
-              className="w-full py-2 text-[#475569] hover:bg-white hover:text-rose-600 rounded-lg transition-all text-[11px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 border border-transparent hover:border-[#e2e8f0]"
-            >
-              <LogOut className="w-3 h-3" /> Sign Out
-            </button>
-          </div>
-        </div>
-      </aside>
+      <Sidebar 
+        user={user!} 
+        view={view} 
+        setView={setView} 
+        handleUserStatusUpdate={handleUserStatusUpdate} 
+        handleLogout={handleLogout} 
+      />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col max-h-screen overflow-hidden">
         {/* Header */}
-        <header className="h-16 bg-[#1e293b] text-white flex items-center justify-between px-6 z-10 shadow-sm">
-          <div className="flex items-center gap-4">
-            <h1 className="text-sm font-bold uppercase tracking-widest text-[#94a3b8]">
-              {view}
-            </h1>
-            <div className="h-4 w-px bg-[#334155] mx-2" />
-            <div className="flex items-center gap-2 text-xs font-semibold text-white/80">
-              <span className="w-2 h-2 rounded-full bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-              CS-302 System Design
-            </div>
-            {notification && (
-              <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className={`ml-4 flex items-center gap-2 px-3 py-1 rounded border text-[9px] font-bold uppercase tracking-wider ${
-                  notification.type === 'alert' ? 'bg-rose-500/20 border-rose-500/50 text-rose-300' : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
-                }`}
-              >
-                <AlertCircle className="w-3 h-3" />
-                {notification.message}
-              </motion.div>
-            )}
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="relative group">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-white/40 focus-within:text-[#3b82f6] transition-colors" />
-              <input 
-                type="text" 
-                placeholder="Quick Search..." 
-                className="bg-[#334155] border-transparent focus:bg-[#475569] transition-all rounded-lg pl-9 pr-4 py-1.5 text-xs w-48 outline-none text-white placeholder-white/40"
-              />
-            </div>
-            {(view === 'DASHBOARD' || view === 'TICKETS') && (
-              <div className="flex flex-col items-end gap-1">
-                <button 
-                  onClick={() => setIsLiveMode(!isLiveMode)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all border ${
-                    isLiveMode 
-                      ? 'bg-[#10b981]/10 border-[#10b981]/50 text-[#10b981]' 
-                      : 'bg-[#334155] border-transparent text-white/40 hover:text-white'
-                  }`}
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full ${isLiveMode ? 'bg-[#10b981] animate-pulse' : 'bg-white/20'}`} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Live Mode</span>
-                  {isLiveMode && <Zap className="w-3 h-3 fill-current" />}
-                </button>
-                {isLiveMode && (
-                  <div className="flex items-center gap-1.5 px-2">
-                    <span className="text-[8px] font-bold text-white/30 uppercase tracking-tighter">Sync:</span>
-                    <span className="text-[8px] font-mono text-[#10b981] font-bold">
-                      {Math.floor((currentTime.getTime() - lastRefreshedAt.getTime()) / 1000)}s ago
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="relative">
-              <button 
-                onClick={() => setShowNotifications(!showNotifications)}
-                className={`p-1.5 transition-colors relative rounded-lg ${showNotifications ? 'bg-[#334155] text-[#3b82f6]' : 'text-white/60 hover:text-white'}`}
-              >
-                <Bell className="w-4 h-4" />
-                {allNotifications.some(n => !n.read) && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full border-2 border-[#1e293b]" />
-                )}
-              </button>
-
-              <AnimatePresence>
-                {showNotifications && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-[#e2e8f0] overflow-hidden z-50"
-                  >
-                    <div className="p-4 border-b border-[#e2e8f0] flex items-center justify-between bg-[#f8fafc]">
-                      <h3 className="text-xs font-bold text-[#1e293b] uppercase tracking-wider">Notifications</h3>
-                      {allNotifications.length > 0 && (
-                        <button 
-                          onClick={() => setAllNotifications(prev => prev.map(n => ({ ...n, read: true })))}
-                          className="text-[9px] font-bold text-[#3b82f6] hover:underline"
-                        >
-                          Mark all read
-                        </button>
-                      )}
-                    </div>
-                    <div className="max-h-96 overflow-y-auto">
-                      {allNotifications.length > 0 ? (
-                        allNotifications.map(n => (
-                          <div 
-                            key={n.id} 
-                            className={`p-4 border-b border-[#f1f5f9] last:border-0 hover:bg-[#f8fafc] transition-colors cursor-pointer ${!n.read ? 'bg-[#3b82f6]/5' : ''}`}
-                            onClick={() => {
-                              const t = tickets.find(ticket => ticket.id === n.ticketId);
-                              if (t) setSelectedTicket(t);
-                              setAllNotifications(prev => prev.map(notif => notif.id === n.id ? { ...notif, read: true } : notif));
-                              setShowNotifications(false);
-                            }}
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500 shrink-0">
-                                <AlertCircle className="w-4 h-4" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-1">
-                                  <p className="text-[10px] font-bold text-[#1e293b] uppercase">{n.message}</p>
-                                  <span className="text-[9px] text-[#94a3b8]">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                </div>
-                                <p className="text-[11px] text-[#475569] line-clamp-2 italic mb-1">"{n.reason}"</p>
-                                <p className="text-[9px] text-[#64748b] font-medium uppercase">Management Notice</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="p-8 text-center bg-white">
-                          <div className="w-10 h-10 bg-[#f8fafc] rounded-full flex items-center justify-center mx-auto mb-3 border border-[#e2e8f0]">
-                            <Bell className="w-5 h-5 text-[#94a3b8]" />
-                          </div>
-                          <p className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-widest">System Clear</p>
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        </header>
+        <Header 
+          view={view} 
+          user={user!} 
+          notification={notification}
+          isLiveMode={isLiveMode}
+          setIsLiveMode={setIsLiveMode}
+          lastRefreshedAt={lastRefreshedAt}
+          currentTime={currentTime}
+          allNotifications={allNotifications}
+          showNotifications={showNotifications}
+          setShowNotifications={setShowNotifications}
+        />
 
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-6">
@@ -1483,49 +1083,69 @@ export default function App() {
                 exit={{ opacity: 0 }}
                 className="space-y-6"
               >
-                {/* Agent Duty Status Toggle */}
-                {user.role === 'AGENT' && (
-                  <div className="bg-white p-4 rounded-xl border border-[#e2e8f0] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="relative">
-                        <img src={user.avatar} className="w-12 h-12 rounded-xl border-2 border-white shadow-md" alt={user.name} referrerPolicy="no-referrer" />
-                        <div className="absolute -bottom-1 -right-1">
-                          <StatusIndicator status={user.status} />
+                {/* Agent Duty Status & Live Mode Toggle */}
+                <div className="flex flex-col lg:grid lg:grid-cols-12 gap-6">
+                  {user.role === 'AGENT' && (
+                    <div className="lg:col-span-8 bg-white p-4 rounded-xl border border-[#e2e8f0] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="relative">
+                          <img src={user.avatar} className="w-12 h-12 rounded-xl border-2 border-white shadow-md" alt={user.name} referrerPolicy="no-referrer" />
+                          <div className="absolute -bottom-1 -right-1">
+                            <StatusIndicator status={user.status} />
+                          </div>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-[#0f172a] capitalize">Welcome back, {user.name.split(' ')[0]}</h3>
+                          <p className="text-[10px] text-[#64748b] font-bold uppercase tracking-widest">Active Duty Session</p>
                         </div>
                       </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-[#0f172a] capitalize">Welcome back, {user.name.split(' ')[0]}</h3>
-                        <p className="text-[10px] text-[#64748b] font-bold uppercase tracking-widest">Active Duty Session</p>
+
+                      <div className="flex bg-[#f1f5f9] p-1 rounded-xl w-full sm:w-auto">
+                        {(['AVAILABLE', 'ON_BREAK', 'OFFLINE'] as AvailabilityStatus[]).map((s) => {
+                          const isActive = user.status === s;
+                          const config = {
+                            AVAILABLE: { label: 'Available', color: 'text-emerald-600', bg: 'bg-emerald-50', dot: 'bg-emerald-500' },
+                            ON_BREAK: { label: 'On Break', color: 'text-amber-600', bg: 'bg-amber-50', dot: 'bg-amber-500' },
+                            OFFLINE: { label: 'Offline', color: 'text-gray-500', bg: 'bg-gray-50', dot: 'bg-gray-400' }
+                          }[s];
+
+                          return (
+                            <button
+                              key={s}
+                              onClick={() => handleUserStatusUpdate(s)}
+                              className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                                isActive 
+                                  ? `bg-white shadow-sm ${config.color}` 
+                                  : 'text-[#64748b] hover:text-[#1e293b]'
+                              }`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${isActive ? config.dot : 'bg-[#cbd5e1]'}`} />
+                              {config.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
+                  )}
 
-                    <div className="flex bg-[#f1f5f9] p-1 rounded-xl w-full sm:w-auto">
-                      {(['AVAILABLE', 'ON_BREAK', 'OFFLINE'] as AvailabilityStatus[]).map((s) => {
-                        const isActive = user.status === s;
-                        const config = {
-                          AVAILABLE: { label: 'Available', color: 'text-emerald-600', bg: 'bg-emerald-50', dot: 'bg-emerald-500' },
-                          ON_BREAK: { label: 'On Break', color: 'text-amber-600', bg: 'bg-amber-50', dot: 'bg-amber-500' },
-                          OFFLINE: { label: 'Offline', color: 'text-gray-500', bg: 'bg-gray-50', dot: 'bg-gray-400' }
-                        }[s];
-
-                        return (
-                          <button
-                            key={s}
-                            onClick={() => handleUserStatusUpdate(s)}
-                            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-                              isActive 
-                                ? `bg-white shadow-sm ${config.color}` 
-                                : 'text-[#64748b] hover:text-[#1e293b]'
-                            }`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? config.dot : 'bg-[#cbd5e1]'}`} />
-                            {config.label}
-                          </button>
-                        );
-                      })}
+                  <div className={`${user.role === 'AGENT' ? 'lg:col-span-4' : 'lg:col-span-12'} bg-white p-4 rounded-xl border border-[#e2e8f0] shadow-sm flex items-center justify-between`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${isLiveMode ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
+                        <Zap className={`w-4 h-4 ${isLiveMode ? 'animate-pulse' : ''}`} />
+                      </div>
+                      <div>
+                        <h4 className="text-[11px] font-bold text-[#0f172a] uppercase tracking-wider leading-none mb-1">Live Awareness</h4>
+                        <p className="text-[9px] text-[#64748b] font-bold uppercase tracking-tighter">Auto-refreshes every 30s</p>
+                      </div>
                     </div>
+                    <button 
+                      onClick={() => setIsLiveMode(!isLiveMode)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#3b82f6] ${isLiveMode ? 'bg-[#10b981]' : 'bg-[#e2e8f0]'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isLiveMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
                   </div>
-                )}
+                </div>
 
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1829,6 +1449,21 @@ export default function App() {
                           <option key={agent} value={agent}>{agent}</option>
                         ))}
                       </select>
+
+                      <div className="bg-[#f1f5f9] p-1 rounded-lg flex items-center">
+                        <button 
+                          onClick={() => setIsLiveMode(!isLiveMode)}
+                          className={`px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
+                            isLiveMode 
+                              ? 'bg-white shadow-sm text-emerald-600' 
+                              : 'text-[#64748b] hover:text-[#1e293b]'
+                          }`}
+                          title={isLiveMode ? `Auto-refresh active - Refreshed ${Math.floor((currentTime.getTime() - lastRefreshedAt.getTime()) / 1000)}s ago` : 'Enable Live Auto-refresh'}
+                        >
+                          <Zap className={`w-3 h-3 ${isLiveMode ? 'fill-current animate-pulse' : ''}`} />
+                          {isLiveMode ? 'Live' : 'Static'}
+                        </button>
+                      </div>
 
                       <button 
                         onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
@@ -2565,1427 +2200,79 @@ export default function App() {
                 </div>
               </motion.div>
             )}
+
+            {view === 'SECURITY' && user.role === 'ADMIN' && (
+              <SecurityView 
+                user={user!} 
+                allUsers={allUsers}
+                tickets={tickets}
+                emailLogs={emailLogs}
+              />
+            )}
           </AnimatePresence>
         </div>
       </main>
 
       {/* Ticket Detail Modal Overlay */}
-      <AnimatePresence>
-        {selectedTicket && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm"
-            onClick={() => setSelectedTicket(null)}
-          >
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white w-full max-w-2xl rounded-2xl shadow-xl border border-[#e2e8f0] overflow-hidden flex flex-col max-h-[90vh]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-8 bg-[#f8fafc] border-b border-[#e2e8f0]">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <span className="text-[10px] font-bold text-[#3b82f6] bg-[#3b82f6]/5 border border-[#3b82f6]/20 px-3 py-1 rounded-full uppercase tracking-wider mb-2 inline-block">
-                      {selectedTicket.category}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-xl font-bold text-[#0f172a]">{selectedTicket.subject}</h2>
-                      <span className="text-[10px] text-[#94a3b8] font-mono border border-[#e2e8f0] px-1.5 py-0.5 rounded leading-none">{selectedTicket.id}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={exportTicketHistory}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#e2e8f0] hover:border-[#3b82f6]/30 hover:bg-[#3b82f6]/5 text-[#64748b] hover:text-[#3b82f6] rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all"
-                      title="Export History (JSON & TXT)"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Export
-                    </button>
-                    <button 
-                      onClick={() => setSelectedTicket(null)}
-                      className="p-1 hover:bg-white rounded-lg transition-colors text-[#94a3b8] border border-transparent hover:border-[#e2e8f0]"
-                    >
-                      <PlusCircle className="w-5 h-5 rotate-45" />
-                    </button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-4 items-center text-[11px] text-[#64748b] font-bold uppercase tracking-wider">
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={selectedTicket.status} />
-                    {selectedTicket.isEscalated && (
-                      <span className="bg-rose-500 text-white px-2 py-0.5 rounded text-[8px] flex items-center gap-1 shadow-sm animate-pulse">
-                        <AlertCircle className="w-2.5 h-2.5" /> ESCALATED
-                      </span>
-                    )}
-                  </div>
-                  <span className="opacity-30">•</span>
-                  <div className="flex items-center gap-1.5">
-                    <PriorityIcon priority={selectedTicket.priority} />
-                    <span className="text-[#1e293b]">{selectedTicket.priority} Priority</span>
-                  </div>
-                  <span className="opacity-30">•</span>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 opacity-60" />
-                    <span>Opened {new Date(selectedTicket.createdAt).toLocaleDateString()}</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                {selectedTicket.isEscalated && (
-                  <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-rose-500 flex items-center justify-center text-white shrink-0 shadow-sm">
-                      <AlertCircle className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h5 className="text-[10px] font-bold text-rose-700 uppercase tracking-wider mb-1">Escalation Reason (Internal Only)</h5>
-                      <p className="text-xs font-medium text-rose-600 leading-relaxed italic">
-                        "{selectedTicket.escalationReason || 'Marked as urgent for management review.'}"
-                      </p>
-                    </div>
-                  </div>
-                )}
-                
-                <div>
-                  <h4 className="card-label mb-3">Case Narrative</h4>
-                  <div className="bg-[#f8fafc] p-6 rounded-xl text-[13px] text-[#475569] border border-[#e2e8f0] leading-relaxed italic relative">
-                    <MessageSquare className="w-4 h-4 absolute top-4 right-4 opacity-10" />
-                    "{selectedTicket.description}"
-                  </div>
-                </div>
-
-                {/* System Dependencies Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="card-label">System Dependencies</h4>
-                    <span className="text-[9px] font-bold text-[#94a3b8] uppercase tracking-widest">Execution Order Enforced</span>
-                  </div>
-                  
-                  <div className="bg-white border border-[#e2e8f0] rounded-xl overflow-hidden shadow-sm">
-                    <div className="p-4 bg-[#f8fafc] border-b border-[#e2e8f0]">
-                      <div className="relative">
-                        <Search className="w-3 h-3 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                        <input 
-                          type="text"
-                          placeholder="Search for blockers to add..."
-                          value={depSearch}
-                          onChange={(e) => setDepSearch(e.target.value)}
-                          className="w-full bg-white border border-[#e2e8f0] rounded-lg pl-8 pr-4 py-1.5 text-[10px] font-bold text-[#1e293b] outline-none focus:ring-1 focus:ring-[#3b82f6] placeholder-[#94a3b8] uppercase tracking-wider"
-                        />
-                      </div>
-                      
-                      {depSearch && (
-                        <div className="mt-2 bg-white border border-[#e2e8f0] rounded-lg shadow-lg max-h-32 overflow-y-auto">
-                          {tickets
-                            .filter(t => t.id !== selectedTicket.id && !selectedTicket.dependencyIds?.includes(t.id) && (t.id.toLowerCase().includes(depSearch.toLowerCase()) || t.subject.toLowerCase().includes(depSearch.toLowerCase())))
-                            .map(t => (
-                              <button
-                                key={t.id}
-                                onClick={() => {
-                                  toggleDependency(selectedTicket.id, t.id);
-                                  setDepSearch('');
-                                }}
-                                className="w-full text-left px-3 py-2 hover:bg-[#f8fafc] flex items-center justify-between border-b last:border-0 border-[#f1f5f9]"
-                              >
-                                <div>
-                                  <span className="text-[8px] font-bold text-[#3b82f6] mr-2">{t.id}</span>
-                                  <span className="text-[10px] font-bold text-[#1e293b] uppercase tracking-tight">{t.subject}</span>
-                                </div>
-                                <PlusCircle className="w-3 h-3 text-[#3b82f6]" />
-                              </button>
-                            ))}
-                          {tickets.filter(t => t.id !== selectedTicket.id && !selectedTicket.dependencyIds?.includes(t.id) && (t.id.toLowerCase().includes(depSearch.toLowerCase()) || t.subject.toLowerCase().includes(depSearch.toLowerCase()))).length === 0 && (
-                            <div className="p-3 text-[10px] text-[#94a3b8] font-medium text-center italic">No candidate tickets found</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="p-4 space-y-3 relative pr-6">
-                      {/* Connection Line */}
-                      {selectedTicket.dependencyIds && selectedTicket.dependencyIds.length > 1 && (
-                        <div className="absolute left-[27px] top-6 bottom-12 w-[1.5px] bg-gradient-to-b from-amber-200 to-[#e2e8f0]" />
-                      )}
-                      
-                      {selectedTicket.dependencyIds && selectedTicket.dependencyIds.length > 0 ? (
-                        selectedTicket.dependencyIds.map(depId => {
-                          const depTicket = tickets.find(t => t.id === depId);
-                          if (!depTicket) return null;
-                          const isCleared = depTicket.status === 'RESOLVED' || depTicket.status === 'CLOSED';
-                          return (
-                            <div key={depId} className="flex items-center justify-between p-3 bg-white border border-[#e2e8f0] rounded-xl group relative z-10 hover:border-amber-200 transition-colors shadow-sm">
-                              <div className="flex items-center gap-4">
-                                <div className={`w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm shrink-0 ${isCleared ? 'bg-[#10b981]' : 'bg-amber-500 animate-pulse'}`} />
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[9px] font-bold text-[#3b82f6] px-1.5 py-0.5 bg-[#3b82f6]/5 rounded">{depId}</span>
-                                    <span className={`text-[10px] font-bold uppercase tracking-tight ${isCleared ? 'text-[#64748b] line-through' : 'text-[#1e293b]'}`}>{depTicket.subject}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <StatusBadge status={depTicket.status} />
-                                    {isCleared ? (
-                                      <span className="text-[8px] font-bold text-[#10b981] uppercase flex items-center gap-1">
-                                        <CheckCircle2 className="w-2.5 h-2.5" /> Path Unlocked
-                                      </span>
-                                    ) : (
-                                      <span className="text-[8px] font-bold text-amber-600 uppercase flex items-center gap-1">
-                                        <Clock className="w-2.5 h-2.5" /> Active Blocker
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button 
-                                  onClick={() => setSelectedTicket(depTicket)}
-                                  className="text-[9px] font-bold text-[#3b82f6] uppercase tracking-wider bg-[#3b82f6]/5 hover:bg-[#3b82f6]/10 px-3 py-1.5 rounded-lg transition-all"
-                                >
-                                  View Context
-                                </button>
-                                <button 
-                                  onClick={() => toggleDependency(selectedTicket.id, depId)}
-                                  className="p-1.5 text-[#94a3b8] hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all border border-transparent hover:border-rose-100 rounded-lg hover:bg-rose-50"
-                                  title="Unlink Dependency"
-                                >
-                                  <PlusCircle className="w-4 h-4 rotate-45" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="py-4 text-center">
-                          <p className="text-[10px] text-[#94a3b8] font-medium italic">No active dependencies linked to this case.</p>
-                          <p className="text-[8px] text-[#cbd5e1] mt-1 font-bold uppercase tracking-widest">Add blockers above to enforce execution order</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Dependent Tickets Section */}
-                {tickets.filter(t => t.dependencyIds?.includes(selectedTicket.id)).length > 0 && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="card-label">Dependent Tickets</h4>
-                      <span className="text-[9px] font-bold text-rose-500 uppercase tracking-widest">Blocked by this Case</span>
-                    </div>
-                    <div className="space-y-2">
-                       {tickets.filter(t => t.dependencyIds?.includes(selectedTicket.id)).map(dep => (
-                         <div key={dep.id} className="flex items-center justify-between p-3 bg-white border border-[#e2e8f0] rounded-lg shadow-sm">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500">
-                                <AlertCircle className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[9px] font-bold text-rose-500">{dep.id}</span>
-                                  <span className="text-[10px] font-bold text-[#1e293b] uppercase tracking-tight">{dep.subject}</span>
-                                </div>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <StatusBadge status={dep.status} />
-                                  <span className="text-[8px] font-bold text-[#64748b] uppercase">Will be unblocked upon resolution</span>
-                                </div>
-                              </div>
-                            </div>
-                            <button 
-                              onClick={() => setSelectedTicket(dep)}
-                              className="text-[9px] font-bold text-[#3b82f6] uppercase hover:underline"
-                            >
-                              View Ticket
-                            </button>
-                         </div>
-                       ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Rating & Feedback Section */}
-                {(selectedTicket.status === 'RESOLVED' || selectedTicket.status === 'CLOSED') && (
-                  <div className="bg-white border border-[#e2e8f0] rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-[#f8fafc] px-6 py-3 border-b border-[#e2e8f0] flex items-center justify-between">
-                      <h4 className="text-[10px] font-bold text-[#1e293b] uppercase tracking-widest flex items-center gap-2">
-                        <Star className="w-3.5 h-3.5 text-amber-500" /> Service Experience Resolution
-                      </h4>
-                      {selectedTicket.rating && (
-                        <div className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold uppercase tracking-tighter">
-                          Feedback Recorded
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-6">
-                      {selectedTicket.rating ? (
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <Star 
-                                key={star} 
-                                className={`w-4 h-4 ${star <= selectedTicket.rating! ? 'text-amber-500 fill-amber-500' : 'text-[#e2e8f0]'}`} 
-                              />
-                            ))}
-                          </div>
-                          <div className="bg-[#f1f5f9] p-4 rounded-lg italic text-xs text-[#475569]">
-                            "{selectedTicket.feedback || 'No comments provided.'}"
-                          </div>
-                        </div>
-                      ) : (
-                        user.role === 'CUSTOMER' ? (
-                          <FeedbackForm 
-                            onSubmit={(rating, feedback) => handleRateTicket(selectedTicket.id, rating, feedback)} 
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center py-6 text-[11px] text-[#94a3b8] font-medium italic">
-                            Waiting for customer evaluation...
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="card-label mb-3">Originating Customer</h4>
-                      <div className="flex items-center gap-3 p-3 bg-white border border-[#e2e8f0] rounded-lg shadow-sm">
-                        <div className="w-9 h-9 rounded-lg bg-[#3b82f6] flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                          {selectedTicket.customerName[0]}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-[#0f172a] tracking-tight">{selectedTicket.customerName}</p>
-                          <p className="text-[10px] text-[#64748b] font-mono">Cust-ID: {selectedTicket.customerId}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="card-label mb-3">Assigned Agent</h4>
-                      <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-3 p-3 bg-white border border-[#e2e8f0] rounded-lg shadow-sm">
-                          {selectedTicket.agentName ? (
-                            <>
-                              <div className="w-9 h-9 rounded-lg bg-[#10b981] flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                                {selectedTicket.agentName[0]}
-                              </div>
-                              <div>
-                                <p className="text-xs font-bold text-[#0f172a] tracking-tight">{selectedTicket.agentName}</p>
-                                <p className="text-[10px] text-[#64748b] font-mono">Agent-ID: {selectedTicket.agentId}</p>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="flex items-center gap-2 p-1">
-                              <div className="w-9 h-9 rounded-lg bg-[#f1f5f9] border border-[#e2e8f0] border-dashed flex items-center justify-center text-[#94a3b8]">
-                                <Users className="w-4 h-4" />
-                              </div>
-                              <span className="text-[11px] font-medium text-[#94a3b8] italic">Waiting for assignment</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {user.role === 'ADMIN' && (
-                          <div className="p-3 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl">
-                            <label className="text-[9px] font-bold text-[#64748b] uppercase mb-2 block tracking-widest">Administrator Action: Reassign</label>
-                            <select 
-                              className="w-full bg-white border border-[#e2e8f0] rounded-lg p-2 text-[11px] font-bold text-[#1e293b] outline-none hover:border-[#3b82f6] transition-colors cursor-pointer"
-                              value={selectedTicket.agentId || ''}
-                              onChange={(e) => handleAssignAgent(selectedTicket.id, e.target.value)}
-                            >
-                              <option value="" disabled>Select Support Agent...</option>
-                              {allUsers.filter(u => u.role === 'AGENT').map(agent => (
-                                <option key={agent.id} value={agent.id} className={agent.status !== 'AVAILABLE' ? 'text-[#94a3b8]' : ''}>
-                                  {agent.name} — Status: {agent.status.replace('_', ' ')} {agent.status !== 'AVAILABLE' ? '⚠️' : '✅'}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-[#f1f5f9]">
-                  <h4 className="card-label mb-4 text-[#1e293b] flex items-center gap-2">
-                    <Clock className="w-4 h-4 opacity-40" /> Ticket History & Audit Trail
-                  </h4>
-                  <div className="space-y-3">
-                    {selectedTicket.history.slice().reverse().map((entry, idx) => (
-                      <div key={entry.id} className="relative pl-6 pb-2 last:pb-0">
-                        {idx !== selectedTicket.history.length - 1 && (
-                          <div className="absolute left-[7px] top-4 bottom-0 w-px bg-[#e2e8f0]" />
-                        )}
-                        <div className={`absolute left-0 top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm flex items-center justify-center ${
-                          entry.type === 'creation' ? 'bg-blue-500' :
-                          entry.type === 'status' ? 'bg-amber-500' :
-                          entry.type === 'assignment' ? 'bg-purple-500' : 'bg-rose-500'
-                        }`} />
-                        <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 group hover:border-[#cbd5e1] transition-colors shadow-sm">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[11px] font-bold text-[#1e293b] tracking-tight">{entry.action}</span>
-                            <span className="text-[9px] font-mono text-[#94a3b8]">{new Date(entry.timestamp).toLocaleString()}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-[#64748b] font-medium">Modified by:</span>
-                            <span className="text-[10px] font-bold text-[#475569]">{entry.user}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-[#f1f5f9]">
-                  <h4 className="card-label mb-4">System metadata</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="p-3 bg-[#f8fafc] rounded-lg border border-[#e2e8f0]">
-                      <p className="text-[9px] font-bold text-[#94a3b8] uppercase mb-1">Source</p>
-                      <p className="text-[10px] font-bold text-[#1e293b]">Web Portal</p>
-                    </div>
-                    <div className="p-3 bg-[#f8fafc] rounded-lg border border-[#e2e8f0]">
-                      <p className="text-[9px] font-bold text-[#94a3b8] uppercase mb-1">SLA Tier</p>
-                      <p className="text-[10px] font-bold text-[#1e293b]">Enterprise</p>
-                    </div>
-                    <div className="p-3 bg-[#f8fafc] rounded-lg border border-[#e2e8f0]">
-                      <p className="text-[9px] font-bold text-[#94a3b8] uppercase mb-1">Last Update</p>
-                      <p className="text-[10px] font-bold text-[#1e293b]">8 hours ago</p>
-                    </div>
-                    <div className="p-3 bg-[#f8fafc] rounded-lg border border-[#e2e8f0]">
-                      <p className="text-[9px] font-bold text-[#94a3b8] uppercase mb-1">Resolution Time</p>
-                      <p className="text-[10px] font-bold text-[#1e293b]">Est. 24h</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 bg-[#f8fafc] border-t border-[#e2e8f0] flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
-                  <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest">Read Only Mode</span>
-                </div>
-                <div className="flex gap-3">
-                  {user.role !== 'CUSTOMER' && (
-                    <div className="relative group/status flex gap-2">
-                      <select 
-                        className="px-5 py-2.5 bg-[#1e293b] text-white rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-[#0f172a] transition-all shadow-sm outline-none cursor-pointer appearance-none pr-8"
-                        value={selectedTicket.status}
-                        onChange={(e) => handleStatusChange(selectedTicket.id, e.target.value as SupportTicket['status'])}
-                      >
-                        <option value="NEW">Set NEW</option>
-                        <option value="ASSIGNED">Set ASSIGNED</option>
-                        <option value="IN_PROGRESS">Set IN_PROGRESS</option>
-                        <option value="ON_HOLD">Set ON_HOLD</option>
-                        <option value="RESOLVED">Set RESOLVED</option>
-                        <option value="CLOSED">Set CLOSED</option>
-                      </select>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-white opacity-40">
-                        <ChevronRight className="w-3 h-3 rotate-90" />
-                      </div>
-                    </div>
-                  )}
-                  {user.role === 'CUSTOMER' && selectedTicket.status === 'RESOLVED' && (
-                    <div className="flex gap-2">
-                       <button 
-                        onClick={() => handleStatusChange(selectedTicket.id, 'CLOSED')}
-                        className="px-5 py-2.5 bg-[#10b981] text-white rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-[#059669] transition-all shadow-sm flex items-center gap-2"
-                      >
-                        <CheckCircle2 className="w-4 h-4" /> Accept Resolution
-                      </button>
-                      <button 
-                        onClick={() => handleStatusChange(selectedTicket.id, 'IN_PROGRESS')}
-                        className="px-5 py-2.5 bg-white border border-amber-200 text-amber-600 rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-amber-50 transition-all shadow-sm flex items-center gap-2"
-                      >
-                        <LogOut className="w-4 h-4 rotate-90" /> Reopen Ticket
-                      </button>
-                    </div>
-                  )}
-                  <button 
-                    className="px-5 py-2.5 bg-white border border-[#e2e8f0] rounded-lg text-[11px] font-bold uppercase tracking-wider text-[#475569] hover:bg-[#f1f5f9] transition-all shadow-sm"
-                    onClick={() => setSelectedTicket(null)}
-                  >
-                    Dismiss
-                  </button>
-                  {user.role === 'AGENT' && !selectedTicket.agentId && (
-                    <button 
-                      onClick={() => handleClaimTicket(selectedTicket.id)}
-                      className="px-5 py-2.5 bg-[#3b82f6] text-white rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-[#2563eb] transition-all shadow-sm flex items-center gap-2"
-                    >
-                      <UserPlus className="w-3.5 h-3.5" /> Claim Ticket
-                    </button>
-                  )}
-                  {user.role !== 'CUSTOMER' && !selectedTicket.isEscalated && (
-                    <button 
-                      onClick={() => setEscalationPrompt(selectedTicket.id)}
-                      className="px-5 py-2.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-rose-100 transition-all shadow-sm flex items-center gap-2"
-                    >
-                      <TrendingUp className="w-3.5 h-3.5" /> Escalate
-                    </button>
-                  )}
-                  {user.role !== 'CUSTOMER' && (
-                    <button className="px-5 py-2.5 bg-[#1e293b] text-white rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-[#0f172a] transition-all shadow-sm">
-                      Modify Status
-                    </button>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <TicketDetailModal
+        selectedTicket={selectedTicket}
+        onClose={() => setSelectedTicket(null)}
+        user={user!}
+        allUsers={allUsers}
+        tickets={tickets}
+        onStatusChange={handleStatusChange}
+        onAssignAgent={handleAssignAgent}
+        onClaimTicket={handleClaimTicket}
+        onEscalate={(id) => setEscalationPrompt(id)}
+        onRateTicket={handleRateTicket}
+        onToggleDependency={toggleDependency}
+        onViewTicket={(t) => setSelectedTicket(t)}
+      />
 
       {/* Add Ticket Modal */}
-      <AnimatePresence>
-        {isAddingTicket && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm"
-            onClick={() => setIsAddingTicket(false)}
-          >
-            <ModalContent
-              onClose={() => setIsAddingTicket(false)}
-              onSubmit={handleCreateTicket}
-              tickets={tickets}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <AddTicketModal
+        isOpen={isAddingTicket}
+        onClose={() => setIsAddingTicket(false)}
+        onSubmit={handleAddTicket}
+        tickets={tickets}
+      />
 
       {/* Escalation Modal */}
-      <AnimatePresence>
-        {escalationPrompt && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
-            onClick={() => {
-              setEscalationPrompt(null);
-              setEscalationReasonInput('');
-              setEscalationConfirming(false);
-              setEscalationValidationError(null);
-            }}
-          >
-            <motion.div 
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 20, opacity: 0 }}
-              className="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden p-8 border border-[#e2e8f0]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-rose-50 text-rose-500 rounded-lg flex items-center justify-center border border-rose-100 shadow-sm">
-                  {escalationConfirming ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-[#0f172a]">
-                    {escalationConfirming ? 'Confirm Escalation' : 'Escalate Ticket'}
-                  </h2>
-                  <p className="text-[10px] text-[#64748b] font-bold uppercase tracking-widest">
-                    {escalationConfirming ? 'Final Verification Step' : 'Management Intervention Required'}
-                  </p>
-                </div>
-              </div>
-              
-              <div className="space-y-4">
-                {!escalationConfirming ? (
-                  <div>
-                    <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest block mb-2 px-1">Reason for Escalation (Mandatory)</label>
-                    <textarea 
-                      autoFocus
-                      rows={4}
-                      value={escalationReasonInput}
-                      onChange={(e) => {
-                        setEscalationReasonInput(e.target.value);
-                        if (e.target.value.trim() && escalationValidationError) {
-                          setEscalationValidationError(null);
-                        }
-                      }}
-                      placeholder="Provide a specific justification for management review..."
-                      className={`w-full bg-[#f8fafc] border ${escalationValidationError ? 'border-rose-500' : 'border-[#e2e8f0]'} rounded-xl p-4 text-xs outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-[#1e293b] placeholder-[#94a3b8] resize-none`}
-                    />
-                    {escalationValidationError && (
-                      <p className="mt-2 text-[10px] font-bold text-rose-500 uppercase px-1 flex items-center gap-2">
-                        <AlertCircle className="w-3 h-3" /> {escalationValidationError}
-                      </p>
-                    )}
-                    <p className="mt-2 text-[9px] text-[#94a3b8] font-medium leading-relaxed">
-                      Escalating a ticket will automatically bump the priority to URGENT and notify the administrative team for immediate attention.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                      <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest">Escalation Target</span>
-                      <span className="text-[11px] font-bold text-[#1e293b] uppercase tracking-tight">{escalationPrompt}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest block mb-1">Provided Justification</span>
-                      <p className="text-[11px] text-[#475569] leading-relaxed italic border-l-2 border-rose-400 pl-3">
-                        "{escalationReasonInput}"
-                      </p>
-                    </div>
-                  </div>
-                )}
+      <EscalationModal
+        id={escalationPrompt}
+        reason={escalationReasonInput}
+        onReasonChange={setEscalationReasonInput}
+        onClose={() => {
+          setEscalationPrompt(null);
+          setEscalationReasonInput('');
+          setEscalationConfirming(false);
+          setEscalationValidationError(null);
+        }}
+        onSubmit={handleEscalate}
+        isEscalating={isEscalating}
+        validationError={escalationValidationError}
+        confirming={escalationConfirming}
+        onConfirmingChange={setEscalationConfirming}
+        setValidationError={setEscalationValidationError}
+      />
 
-                <div className="flex gap-3 pt-4">
-                  <button 
-                    onClick={() => {
-                      if (escalationConfirming) {
-                        setEscalationConfirming(false);
-                      } else {
-                        setEscalationPrompt(null);
-                        setEscalationReasonInput('');
-                        setEscalationValidationError(null);
-                      }
-                    }}
-                    className="flex-1 py-3 bg-white border border-[#e2e8f0] text-[#64748b] rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#f8fafc] transition-all"
-                  >
-                    {escalationConfirming ? 'Back' : 'Cancel'}
-                  </button>
-                  <button 
-                    disabled={isEscalating}
-                    onClick={() => {
-                      if (!escalationConfirming) {
-                        if (!escalationReasonInput.trim()) {
-                          setEscalationValidationError('Reason is mandatory for escalation.');
-                          return;
-                        }
-                        if (escalationReasonInput.trim().length < 10) {
-                          setEscalationValidationError('Reason must be at least 10 characters.');
-                          return;
-                        }
-                        setEscalationValidationError(null);
-                        setEscalationConfirming(true);
-                      } else {
-                        handleEscalate(escalationPrompt, escalationReasonInput);
-                      }
-                    }}
-                    className="flex-1 py-3 bg-rose-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-rose-600 transition-all shadow-sm disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {isEscalating ? (
-                      <>
-                        <Clock className="w-3 h-3 animate-spin" /> Verifying...
-                      </>
-                    ) : (
-                      escalationConfirming ? 'Final Confirm' : 'Proceed to Confirm'
-                    )}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-
-        {bulkActionModal && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[70] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
-            onClick={() => setBulkActionModal(null)}
-          >
-            <motion.div 
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 20, opacity: 0 }}
-              className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden p-8 border border-[#e2e8f0]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-[#3b82f6]/10 text-[#3b82f6] rounded-xl flex items-center justify-center border border-[#3b82f6]/20 shadow-sm">
-                  <SettingsIcon className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-[#0f172a]">Confirm Bulk Action</h2>
-                  <p className="text-[10px] text-[#64748b] font-bold uppercase tracking-widest leading-none">Security Validation Interface</p>
-                </div>
-              </div>
-
-              <div className="p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] mb-6">
-                <div className="flex items-center justify-between mb-4 pb-4 border-b border-[#e2e8f0]">
-                  <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">Targets</span>
-                  <span className="text-[11px] font-bold text-[#1e293b]">{selectedTicketIds.length} Tickets</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">Operation</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-[#3b82f6] uppercase">
-                      {bulkActionModal.type === 'status' ? 'Status Update' : 'Assignment'}
-                    </span>
-                    <ChevronRight className="w-3 h-3 text-[#cbd5e1]" />
-                    <span className="text-[11px] font-bold text-[#1e293b] uppercase">
-                      {bulkActionModal.type === 'status' 
-                        ? bulkActionModal.value.replace('_', ' ') 
-                        : (allUsers.find(u => u.id === bulkActionModal.value)?.name || 'Unknown')}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-[11px] text-[#64748b] mb-8 leading-relaxed italic border-l-2 border-[#3b82f6] pl-4">
-                This operation will trigger automated email notifications and audit logs for all selected entities. Ensure the status transition aligns with organizational protocol.
-              </p>
-
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setBulkActionModal(null)}
-                  className="flex-1 py-3 bg-white border border-[#e2e8f0] text-[#64748b] rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#f8fafc] transition-all"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={() => {
-                    if (bulkActionModal.type === 'status') {
-                      handleBulkStatusChange(bulkActionModal.value as SupportTicket['status']);
-                    } else {
-                      handleBulkAssign(bulkActionModal.value);
-                    }
-                  }}
-                  className="flex-1 py-3 bg-[#1e293b] text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#0f172a] transition-all shadow-md"
-                >
-                  Execute Batch
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Bulk Action Modal */}
+      <BulkActionModal
+        isOpen={!!bulkActionModal}
+        onClose={() => setBulkActionModal(null)}
+        selectedTicketIds={selectedTicketIds}
+        actionType={bulkActionModal?.type || null}
+        actionValue={bulkActionModal?.value || null}
+        allUsers={allUsers}
+        onExecute={() => {
+          if (bulkActionModal?.type === 'status') {
+            handleBulkStatusChange(bulkActionModal.value as SupportTicket['status']);
+          } else if (bulkActionModal?.type === 'assignment') {
+            handleBulkAssign(bulkActionModal.value);
+          }
+        }}
+      />
     </div>
-  );
-}
-
-function ModalContent({ onClose, onSubmit, tickets }: { 
-  onClose: () => void, 
-  onSubmit: (subject: string, category: string, priority: SupportTicket['priority'], description: string, dependencyIds: string[]) => void,
-  tickets: SupportTicket[]
-}) {
-  const [subject, setSubject] = useState('');
-  const [category, setCategory] = useState('Technical Support');
-  const [priority, setPriority] = useState<SupportTicket['priority']>('MEDIUM');
-  const [description, setDescription] = useState('');
-  const [selectedDependencies, setSelectedDependencies] = useState<string[]>([]);
-  const [depSearch, setDepSearch] = useState('');
-
-  const toggleDependency = (id: string) => {
-    setSelectedDependencies(prev => 
-      prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]
-    );
-  };
-
-  return (
-    <motion.div 
-      initial={{ y: 20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ y: 20, opacity: 0 }}
-      className="bg-white w-full max-w-xl rounded-xl shadow-2xl overflow-hidden p-10 border border-[#e2e8f0] flex flex-col max-h-[90vh]"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="overflow-y-auto pr-2 custom-scrollbar">
-        <h2 className="text-xl font-bold text-[#0f172a] mb-1">New Service Ticket</h2>
-        <p className="text-[11px] text-[#64748b] mb-8 font-medium uppercase tracking-wider">Formal Ticket Registration</p>
-        
-        <div className="space-y-6">
-          <div>
-            <label className="card-label block mb-2">Subject</label>
-            <input 
-              type="text" 
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="e.g. Protocol Timeout Error"
-              className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none text-[#1e293b] placeholder-[#94a3b8]"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="card-label block mb-2">Category</label>
-              <select 
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none text-[#1e293b] appearance-none cursor-pointer"
-              >
-                <option>Technical Support</option>
-                <option>Billing Issue</option>
-                <option>Account Sync</option>
-                <option>Other</option>
-              </select>
-            </div>
-            <div>
-              <label className="card-label block mb-2">Priority</label>
-              <select 
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as SupportTicket['priority'])}
-                className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none text-[#1e293b] appearance-none cursor-pointer"
-              >
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
-                <option value="URGENT">Urgent</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="card-label block mb-2">Detailed Case Notes</label>
-            <textarea 
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the technical constraints..."
-              className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs focus:ring-1 focus:ring-[#3b82f6] outline-none resize-none text-[#1e293b] placeholder-[#94a3b8]"
-            />
-          </div>
-
-          <div className="pt-4 border-t border-[#f1f5f9]">
-            <label className="card-label block mb-2">Link Source Dependencies (Optional)</label>
-            <div className="relative mb-4">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-              <input 
-                type="text"
-                value={depSearch}
-                onChange={(e) => setDepSearch(e.target.value)}
-                placeholder="Search for blockers..."
-                className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg pl-9 p-3 text-[11px] font-bold uppercase tracking-wider focus:ring-1 focus:ring-[#3b82f6] outline-none text-[#1e293b] placeholder-[#94a3b8]"
-              />
-              
-              {depSearch && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-[#e2e8f0] rounded-lg shadow-xl max-h-40 overflow-y-auto">
-                  {tickets
-                    .filter(t => !selectedDependencies.includes(t.id) && (t.id.toLowerCase().includes(depSearch.toLowerCase()) || t.subject.toLowerCase().includes(depSearch.toLowerCase())))
-                    .map(t => (
-                      <button
-                        key={t.id}
-                        onClick={() => {
-                          toggleDependency(t.id);
-                          setDepSearch('');
-                        }}
-                        className="w-full text-left px-4 py-2.5 hover:bg-[#f8fafc] border-b last:border-0 border-[#f1f5f9] flex items-center justify-between group"
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-bold text-[#3b82f6]">{t.id}</span>
-                          <span className="text-[11px] font-bold text-[#1e293b] uppercase tracking-tighter">{t.subject}</span>
-                        </div>
-                        <PlusCircle className="w-4 h-4 text-[#3b82f6] opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </button>
-                    ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {selectedDependencies.map(depId => {
-                const depTicket = tickets.find(t => t.id === depId);
-                return (
-                  <div key={depId} className="flex items-center gap-2 bg-[#f1f5f9] border border-[#e2e8f0] px-3 py-1.5 rounded-lg group">
-                    <div className="flex flex-col">
-                      <span className="text-[8px] font-bold text-[#3b82f6]">{depId}</span>
-                      <span className="text-[9px] font-bold text-[#475569] uppercase tracking-tighter max-w-[120px] truncate">{depTicket?.subject}</span>
-                    </div>
-                    <button 
-                      onClick={() => toggleDependency(depId)}
-                      className="p-1 text-[#94a3b8] hover:text-rose-500 transition-colors"
-                    >
-                      <PlusCircle className="w-3.5 h-3.5 rotate-45" />
-                    </button>
-                  </div>
-                );
-              })}
-              {selectedDependencies.length === 0 && (
-                <p className="text-[10px] text-[#94a3b8] italic font-medium">No initial blockers selected.</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex gap-4 pt-6 mt-6 border-t border-[#f1f5f9]">
-          <button 
-            onClick={onClose}
-            className="flex-1 py-3 bg-white border border-[#e2e8f0] text-[#64748b] rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#f8fafc] transition-all"
-          >
-            Abort
-          </button>
-          <button 
-            disabled={!subject || !description}
-            onClick={() => onSubmit(subject, category, priority, description, selectedDependencies)}
-            className="flex-1 py-3 bg-[#3b82f6] text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#2563eb] transition-all shadow-sm disabled:opacity-50"
-          >
-            Formal Submission
-          </button>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function FeedbackForm({ onSubmit }: { onSubmit: (rating: number, feedback: string) => void }) {
-  const [rating, setRating] = useState(0);
-  const [hoverRating, setHoverRating] = useState(0);
-  const [feedback, setFeedback] = useState('');
-
-  return (
-    <div className="space-y-6">
-      <div className="space-y-4">
-        <p className="text-[11px] font-bold text-[#1e293b] uppercase tracking-wider">How was your support experience?</p>
-        <div className="flex items-center gap-2">
-          {[1, 2, 3, 4, 5].map((star) => (
-            <button 
-              key={star}
-              onMouseEnter={() => setHoverRating(star)}
-              onMouseLeave={() => setHoverRating(0)}
-              onClick={() => setRating(star)}
-              className="p-1 hover:scale-110 transition-transform"
-            >
-              <Star 
-                className={`w-6 h-6 transition-colors ${
-                  star <= (hoverRating || rating) ? 'text-amber-500 fill-amber-500' : 'text-[#e2e8f0]'
-                }`} 
-              />
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest">Resolution Comments</label>
-        <textarea 
-          value={feedback}
-          onChange={(e) => setFeedback(e.target.value)}
-          placeholder="What did we do well? What could we improve?"
-          rows={3}
-          className="w-full bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-3 text-xs outline-none focus:ring-1 focus:ring-[#3b82f6] text-[#1e293b] placeholder-[#94a3b8] resize-none"
-        />
-      </div>
-
-      <button 
-        disabled={!rating}
-        onClick={() => onSubmit(rating, feedback)}
-        className="w-full py-2.5 bg-[#1e293b] text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-[#0f172a] transition-all shadow-sm disabled:opacity-30 flex items-center justify-center gap-2"
-      >
-        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Submit Evaluation
-      </button>
-    </div>
-  );
-}
-
-// --- Helper Components ---
-
-function MenuButton({ active, icon, label, onClick }: { active: boolean, icon: React.ReactNode, label: string, onClick: () => void }) {
-  return (
-    <button 
-      onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group ${
-        active 
-          ? 'bg-[#1e293b] text-white shadow-md shadow-[#1e293b]/10' 
-          : 'text-gray-500 hover:bg-[#f1f5f9] hover:text-[#1e293b]'
-      }`}
-    >
-      <span className={active ? 'text-[#3b82f6]' : 'text-[#94a3b8] group-hover:text-[#64748b]'}>{icon}</span>
-      <span className="text-[11px] font-bold uppercase tracking-widest">{label}</span>
-      {active && <motion.div layoutId="active-nav" className="ml-auto w-1 h-3 bg-[#3b82f6] rounded-full" />}
-    </button>
-  );
-}
-
-function StatCard({ label, value, icon, color = 'blue', onClick }: { label: string, value: string | number, icon: React.ReactNode, color?: 'blue' | 'emerald' | 'amber' | 'rose', onClick?: () => void }) {
-  return (
-    <div 
-      onClick={onClick}
-      className={`bg-white p-5 rounded-xl border border-[#e2e8f0] shadow-sm hover:border-[#3b82f6] transition-all group overflow-hidden relative ${onClick ? 'cursor-pointer' : ''}`}
-    >
-      <div className="flex items-center justify-between mb-4 relative z-10">
-        <div className="p-2 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg group-hover:bg-white group-hover:border-[#3b82f6] transition-all">
-          {icon}
-        </div>
-        <div className="text-[9px] uppercase font-bold tracking-widest text-[#94a3b8]">Exercise 1</div>
-      </div>
-      <p className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider mb-1 relative z-10">{label}</p>
-      <h3 className="text-2xl font-bold text-[#0f172a] tracking-tight relative z-10">{value}</h3>
-      <div className="absolute bottom-0 right-0 p-1 opacity-5 group-hover:opacity-10 transition-opacity transform translate-x-2 translate-y-2">
-        <TrendingUp className="w-16 h-16" />
-      </div>
-    </div>
-  );
-}
-
-function StatusIndicator({ status }: { status: AvailabilityStatus }) {
-  const statusColors: Record<AvailabilityStatus, string> = {
-    AVAILABLE: 'bg-emerald-500',
-    ON_BREAK: 'bg-amber-500',
-    OFFLINE: 'bg-gray-400',
-  };
-
-  return (
-    <div className={`w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${statusColors[status]}`} />
-  );
-}
-
-function ProfileView({ user, allUsers, tickets, onStatusUpdate }: { 
-  user: User, 
-  allUsers: User[], 
-  tickets: SupportTicket[],
-  onStatusUpdate: (status: AvailabilityStatus) => void 
-}) {
-  const userTickets = tickets.filter(t => t.customerId === user.id || t.agentId === user.id);
-  const activeTickets = userTickets.filter(t => t.status !== 'RESOLVED' && t.status !== 'CLOSED');
-  
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="max-w-4xl mx-auto space-y-6 pb-12"
-    >
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h2 className="text-xl font-bold text-[#0f172a]">Identity Profile</h2>
-          <p className="text-[11px] text-[#64748b] font-medium uppercase tracking-wider">System Credentials & Operational Status</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column - Main Profile Info */}
-        <div className="lg:col-span-4 space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-[#e2e8f0] shadow-sm text-center">
-            <div className="relative inline-block mb-4">
-              <img 
-                src={user.avatar} 
-                className="w-32 h-32 rounded-3xl border-4 border-white shadow-xl mx-auto" 
-                alt={user.name} 
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute -bottom-2 -right-2">
-                <StatusIndicator status={user.status} />
-              </div>
-            </div>
-            <h3 className="text-xl font-bold text-[#0f172a]">{user.name}</h3>
-            <p className="text-xs text-[#64748b] font-semibold mb-3">{user.email}</p>
-            
-            <div className="flex items-center justify-center gap-2 mb-6">
-              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest border ${
-                user.role === 'ADMIN' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                user.role === 'AGENT' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/20' :
-                'bg-emerald-50 text-emerald-600 border-emerald-100'
-              }`}>
-                {user.role}
-              </span>
-              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest border ${
-                user.status === 'AVAILABLE' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                user.status === 'ON_BREAK' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                'bg-gray-50 text-gray-500 border-gray-100'
-              }`}>
-                {user.status.replace('_', ' ')}
-              </span>
-            </div>
-
-            {user.role === 'AGENT' && (
-              <div className="pt-6 border-t border-[#f1f5f9] space-y-3">
-                <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest">Update Duty Status</p>
-                <div className="grid grid-cols-1 gap-2">
-                  {(['AVAILABLE', 'ON_BREAK', 'OFFLINE'] as AvailabilityStatus[]).map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => onStatusUpdate(s)}
-                      className={`w-full py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border flex items-center justify-center gap-2 ${
-                        user.status === s 
-                          ? 'bg-[#1e293b] text-white border-[#1e293b] shadow-lg' 
-                          : 'bg-white text-[#64748b] border-[#e2e8f0] hover:bg-[#f8fafc]'
-                      }`}
-                    >
-                      <div className={`w-1.5 h-1.5 rounded-full ${
-                        s === 'AVAILABLE' ? 'bg-emerald-500' :
-                        s === 'ON_BREAK' ? 'bg-amber-500' : 'bg-gray-400'
-                      }`} />
-                      {s.replace('_', ' ')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="bg-[#1e293b] p-6 rounded-2xl shadow-xl text-white">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center border border-blue-500/30">
-                <SettingsIcon className="w-5 h-5 text-blue-400" />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-0.5">Preferences</p>
-                <h4 className="text-sm font-bold text-white">Advanced Settings</h4>
-              </div>
-            </div>
-            <p className="text-[11px] text-blue-100/60 leading-relaxed mb-6">Modify notification frequency and interface themes.</p>
-            <button className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all">
-              Configuration Menu
-            </button>
-          </div>
-        </div>
-
-        {/* Right Column - Activity & More Info */}
-        <div className="lg:col-span-8 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white p-6 rounded-2xl border border-[#e2e8f0] shadow-sm">
-              <p className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest mb-1">Total Lifecycle Interaction</p>
-              <h4 className="text-2xl font-bold text-[#1e293b]">{userTickets.length}</h4>
-              <p className="text-[10px] text-[#94a3b8] mt-1 font-medium">Recorded service tickets</p>
-            </div>
-            <div className="bg-white p-6 rounded-2xl border border-[#e2e8f0] shadow-sm">
-              <p className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest mb-1">Current Active Cycle</p>
-              <h4 className="text-2xl font-bold text-[#3b82f6]">{activeTickets.length}</h4>
-              <p className="text-[10px] text-[#94a3b8] mt-1 font-medium">Pending resolutions</p>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-[#e2e8f0] shadow-sm">
-            <h3 className="text-sm font-bold text-[#0f172a] mb-6 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-[#3b82f6]" />
-              Recent Activity Stream
-            </h3>
-            <div className="space-y-4">
-              {activeTickets.length > 0 ? (
-                activeTickets.slice(0, 5).map(t => (
-                  <div key={t.id} className="flex items-center justify-between p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] group hover:border-[#3b82f6] transition-all">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-white border border-[#e2e8f0] rounded-xl flex items-center justify-center text-[#3b82f6] group-hover:bg-[#3b82f6] group-hover:text-white transition-all shadow-sm">
-                        <Ticket className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-bold text-[#3b82f6] mb-0.5">{t.id}</p>
-                        <h5 className="text-[11px] font-bold text-[#1e293b] uppercase tracking-tighter truncate max-w-[200px]">{t.subject}</h5>
-                        <div className="flex items-center gap-2 mt-1">
-                          <StatusBadge status={t.status} />
-                          <span className="text-[9px] font-bold text-[#94a3b8] uppercase tracking-tighter">{new Date(t.createdAt).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[#94a3b8] opacity-0 group-hover:opacity-100 transition-all" />
-                  </div>
-                ))
-              ) : (
-                <div className="py-12 text-center">
-                  <div className="w-12 h-12 bg-[#f8fafc] rounded-full flex items-center justify-center mx-auto mb-4 border border-[#e2e8f0]">
-                    <CheckCircle2 className="w-6 h-6 text-[#94a3b8] opacity-20" />
-                  </div>
-                  <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest">No active tickets found</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {user.role === 'ADMIN' && (
-            <div className="bg-rose-50 p-6 rounded-2xl border border-rose-100 shadow-sm">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-rose-500 rounded-xl flex items-center justify-center text-white shadow-lg">
-                  <SettingsIcon className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#1e293b]">Admin Management Protocols</h3>
-                  <p className="text-[10px] text-[#64748b] font-bold uppercase tracking-widest">Privileged Access controls</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button className="flex items-center justify-between p-4 bg-white border border-rose-100 rounded-xl hover:shadow-md transition-all group">
-                  <div className="text-left">
-                    <p className="text-[11px] font-bold text-[#1e293b]">User Directory</p>
-                    <p className="text-[9px] text-[#64748b]">Manage system accounts</p>
-                  </div>
-                  <Users className="w-4 h-4 text-[#94a3b8] group-hover:text-rose-500 transition-colors" />
-                </button>
-                <button className="flex items-center justify-between p-4 bg-white border border-rose-100 rounded-xl hover:shadow-md transition-all group">
-                  <div className="text-left">
-                    <p className="text-[11px] font-bold text-[#1e293b]">Security Logs</p>
-                    <p className="text-[9px] text-[#64748b]">Audit system interactions</p>
-                  </div>
-                  <AlertCircle className="w-4 h-4 text-[#94a3b8] group-hover:text-rose-500 transition-colors" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function AdminDashboardView({ stats, statusData, chartData, agentPerformanceData, allUsers, tickets, emailLogs }: { 
-  stats: any, 
-  statusData: any, 
-  chartData: any, 
-  agentPerformanceData: any,
-  allUsers: User[],
-  tickets: SupportTicket[],
-  emailLogs: EmailLog[]
-}) {
-  const activeAgents = allUsers.filter(u => u.role === 'AGENT');
-  const [showEmailHub, setShowEmailHub] = useState(false);
-  const [emailSearchQuery, setEmailSearchQuery] = useState('');
-  const [emailTypeFilter, setEmailTypeFilter] = useState('ALL');
-
-  const filteredEmailLogs = useMemo(() => {
-    return emailLogs.filter(log => {
-      const searchLower = emailSearchQuery.toLowerCase();
-      const matchSearch = emailSearchQuery === '' || 
-        log.recipient.toLowerCase().includes(searchLower) || 
-        log.subject.toLowerCase().includes(searchLower);
-      
-      const matchType = emailTypeFilter === 'ALL' || log.type === emailTypeFilter;
-
-      return matchSearch && matchType;
-    });
-  }, [emailLogs, emailSearchQuery, emailTypeFilter]);
-  
-  return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="space-y-6"
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-[#0f172a]">Command Center</h2>
-          <p className="text-[11px] text-[#64748b] font-medium uppercase tracking-wider">Operational KPI & Staffing Overview</p>
-        </div>
-        <div className="flex gap-2">
-           <button 
-             onClick={() => setShowEmailHub(!showEmailHub)}
-             className={`px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all border font-bold text-[10px] uppercase tracking-wider ${
-               showEmailHub 
-                ? 'bg-[#1e293b] text-white border-[#1e293b]' 
-                : 'bg-white text-[#64748b] border-[#e2e8f0] hover:bg-[#f8fafc]'
-             }`}
-           >
-              <MessageSquare className="w-3.5 h-3.5" /> 
-              {showEmailHub ? 'Dashboard' : 'Email Hub'}
-           </button>
-           <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center gap-2">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-tight">{activeAgents.filter(a => a.status === 'AVAILABLE').length} Agents Online</span>
-           </div>
-        </div>
-      </div>
-
-      <AnimatePresence mode="wait">
-        {showEmailHub ? (
-          <motion.div
-            key="email-hub"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="bg-white p-6 rounded-xl border border-[#e2e8f0] shadow-sm"
-          >
-            <div className="flex flex-col lg:flex-row items-center justify-between mb-6 gap-4">
-              <div>
-                <h3 className="card-label">Communication Ledger</h3>
-                <h3 className="text-sm font-bold text-[#0f172a]">Recent Email Dispatches</h3>
-              </div>
-              
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                  <input 
-                    type="text"
-                    placeholder="Search recipient or subject..."
-                    value={emailSearchQuery}
-                    onChange={(e) => setEmailSearchQuery(e.target.value)}
-                    className="bg-[#f8fafc] border border-[#e2e8f0] rounded-lg pl-9 pr-4 py-1.5 text-[10px] font-bold text-[#1e293b] outline-none focus:ring-1 focus:ring-[#3b82f6] w-64 placeholder-[#94a3b8] uppercase tracking-wider transition-all"
-                  />
-                </div>
-
-                <select 
-                  value={emailTypeFilter}
-                  onChange={(e) => setEmailTypeFilter(e.target.value)}
-                  className="bg-[#f8fafc] border border-[#e2e8f0] rounded-lg px-3 py-1.5 text-[10px] font-bold text-[#1e293b] outline-none focus:ring-1 focus:ring-[#3b82f6] uppercase tracking-wider cursor-pointer"
-                >
-                  <option value="ALL">All Event Types</option>
-                  <option value="TICKET_CREATED">Ticket Created</option>
-                  <option value="TICKET_ASSIGNED">Ticket Assigned</option>
-                  <option value="TICKET_RESOLVED">Ticket Resolved</option>
-                  <option value="STATUS_UPDATE">Status Update</option>
-                  <option value="ESCALATION">Escalation</option>
-                </select>
-
-                {(emailSearchQuery !== '' || emailTypeFilter !== 'ALL') && (
-                  <button 
-                    onClick={() => {
-                      setEmailSearchQuery('');
-                      setEmailTypeFilter('ALL');
-                    }}
-                    className="text-[10px] font-bold text-[#ef4444] uppercase tracking-wider hover:underline px-2"
-                  >
-                    Reset
-                  </button>
-                )}
-
-                <div className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest pl-2 border-l border-[#e2e8f0]">
-                  Results: {filteredEmailLogs.length}
-                </div>
-              </div>
-            </div>
-            
-            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-              {filteredEmailLogs.length === 0 ? (
-                <div className="py-20 text-center">
-                  <div className="w-16 h-16 bg-[#f8fafc] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#e2e8f0] text-[#94a3b8]">
-                    <Bell className="w-8 h-8 opacity-20" />
-                  </div>
-                  <p className="text-[11px] font-bold text-[#94a3b8] uppercase tracking-widest">
-                    {emailLogs.length === 0 ? 'No communications recorded yet' : 'No matches found for active filters'}
-                  </p>
-                </div>
-              ) : (
-                filteredEmailLogs.map(log => (
-                  <div key={log.id} className="p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] group hover:border-[#3b82f6] transition-all">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border shadow-sm ${
-                          log.type === 'ESCALATION' ? 'bg-rose-50 border-rose-100 text-rose-500' :
-                          log.type === 'TICKET_RESOLVED' ? 'bg-emerald-50 border-emerald-100 text-emerald-500' :
-                          'bg-blue-50 border-blue-100 text-blue-500'
-                        }`}>
-                          <MessageSquare className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-[#0f172a] group-hover:text-[#3b82f6] transition-colors">{log.subject}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <p className="text-[9px] font-bold text-[#64748b] uppercase tracking-tighter">To: {log.recipient}</p>
-                            <span className="w-1 h-1 bg-[#e2e8f0] rounded-full" />
-                            <p className="text-[9px] font-bold text-[#94a3b8] uppercase tracking-tighter">{new Date(log.timestamp).toLocaleTimeString()}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-[8px] font-bold px-1.5 py-0.5 bg-white border border-[#e2e8f0] rounded text-[#64748b] uppercase">
-                        {log.ticketId}
-                      </div>
-                    </div>
-                    <div className="mt-3 bg-white p-3 rounded-lg border border-[#e2e8f0] text-[11px] text-[#475569] leading-relaxed whitespace-pre-wrap">
-                      {log.body}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </motion.div>
-        ) : (
-          <motion.div key="main-stats" className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard label="Total Lifecycle" value={stats.total} icon={<Ticket className="w-4 h-4 text-[#3b82f6]" />} />
-              <StatCard label="Resolution Rate" value={`${Math.round((stats.resolved/(stats.total || 1))*100)}%`} icon={<CheckCircle2 className="w-4 h-4 text-[#10b981]" />} />
-              <StatCard label="Active Backlog" value={stats.pending} icon={<Clock className="w-4 h-4 text-[#f59e0b]" />} />
-              <StatCard label="Critical Breach" value={stats.urgent} icon={<AlertCircle className="w-4 h-4 text-[#ef4444]" />} />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-8 space-y-6">
-                <div className="bg-white p-6 rounded-xl border border-[#e2e8f0] shadow-sm">
-                  <h3 className="card-label mb-4">Agent Workload & Availability Status</h3>
-                  <div className="space-y-3">
-                    {activeAgents.map(agent => {
-                      const agentTickets = tickets.filter(t => t.agentId === agent.id && t.status !== 'RESOLVED' && t.status !== 'CLOSED');
-                      const loadPercent = Math.min((agentTickets.length / 5) * 100, 100);
-                      
-                      return (
-                        <div key={agent.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] gap-4">
-                          <div className="flex items-center gap-3 min-w-[180px]">
-                            <div className="relative">
-                              <img src={agent.avatar} className="w-10 h-10 rounded-lg border border-white shadow-sm" alt={agent.name} />
-                              <div className="absolute -bottom-1 -right-1">
-                                <StatusIndicator status={agent.status} />
-                              </div>
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-[#1e293b]">{agent.name}</p>
-                              <p className={`text-[9px] font-bold uppercase tracking-tighter ${
-                                agent.status === 'AVAILABLE' ? 'text-emerald-600' :
-                                agent.status === 'ON_BREAK' ? 'text-amber-600' : 'text-gray-400'
-                              }`}>{agent.status.replace('_', ' ')}</p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex-1 flex items-center gap-4">
-                            <div className="flex-1">
-                              <div className="flex justify-between mb-1 text-[9px] font-bold uppercase text-[#64748b]">
-                                <span>Current Workload</span>
-                                <span className={agentTickets.length > 4 ? 'text-rose-500' : 'text-[#3b82f6]'}>{agentTickets.length} / 5 Cap</span>
-                              </div>
-                              <div className="w-full h-2 bg-[#e2e8f0] rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full transition-all duration-700 ${
-                                    loadPercent > 80 ? 'bg-rose-500' : loadPercent > 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                                  }`}
-                                  style={{ width: `${loadPercent}%` }}
-                                />
-                              </div>
-                            </div>
-                            <div className="text-right min-w-[60px]">
-                              <p className="text-xs font-bold text-[#1e293b]">{agentPerformanceData.find((d: any) => d.name === agent.name)?.avgTime || '0.0h'}</p>
-                              <p className="text-[8px] text-[#94a3b8] font-bold uppercase">Avg Handle</p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="lg:col-span-4 space-y-6">
-                <div className="bg-white p-6 rounded-xl border border-[#e2e8f0] shadow-sm">
-                  <h3 className="card-label mb-4">Volume by Class</h3>
-                  <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={chartData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={40}
-                          outerRadius={60}
-                          paddingAngle={5}
-                          dataKey="value"
-                        >
-                          {chartData.map((entry: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'][index % 4]} />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="space-y-2 mt-4">
-                    {chartData.map((item: any, i: number) => (
-                      <div key={item.name} className="flex items-center justify-between text-[10px]">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981'][i % 4] }} />
-                          <span className="text-[#64748b] font-bold">{item.name}</span>
-                        </div>
-                        <span className="font-bold text-[#1e293b]">{item.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="bg-[#1e293b] p-6 rounded-xl border border-[#0f172a] shadow-lg text-white">
-                  <div className="flex items-center gap-3 mb-4">
-                     <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center border border-blue-500/30">
-                        <TrendingUp className="w-5 h-5 text-blue-400" />
-                     </div>
-                     <div>
-                        <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest leading-none mb-1">Efficiency Factor</p>
-                        <p className="text-lg font-bold">94.2%</p>
-                     </div>
-                  </div>
-                  <p className="text-[10px] text-blue-100/60 leading-relaxed">System-wide performance is within nominal parameters. Response times are stable.</p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
   );
 }
 

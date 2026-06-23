@@ -1,6 +1,6 @@
 {
-  "name": "BPO Management System",
-  "description": "A comprehensive Business Process Outsourcing management platform for ticket handling, agent management, and customer support tracking.",
+  "name": "Sentinel BPO - Secure Management Suite",
+  "description": "Enterprise-grade Business Process Outsourcing management platform featuring advanced ticket handling, agent performance analytics, and secure audit protocols.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
