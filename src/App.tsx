@@ -60,6 +60,7 @@ import { Header } from './components/layout/Header';
 import { ProfileView } from './components/views/ProfileView';
 import { AdminDashboardView } from './components/views/AdminDashboardView';
 import { SecurityView } from './components/views/SecurityView';
+import { QuickTicketActions } from './components/tickets/QuickTicketActions';
 import { TicketDetailModal } from './components/modals/TicketDetailModal';
 import { AddTicketModal } from './components/modals/AddTicketModal';
 import { EscalationModal } from './components/modals/EscalationModal';
@@ -1660,38 +1661,13 @@ export default function App() {
                         
                           <div className="flex items-center gap-6 w-full sm:w-auto justify-between border-t sm:border-t-0 pt-3 sm:pt-0">
                             {user.role !== 'CUSTOMER' && (
-                              <div className="flex items-center gap-1.5 p-1 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                                {user.role === 'AGENT' && !t.agentId && (
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); handleClaimTicket(t.id); }}
-                                    title="Claim Ticket"
-                                    className="w-6 h-6 rounded-md flex items-center justify-center transition-all bg-[#3b82f6] text-white shadow-sm hover:bg-[#2563eb]"
-                                  >
-                                    <UserPlus className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleStatusChange(t.id, 'IN_PROGRESS'); }}
-                                  title="Mark In Progress"
-                                  className={`w-6 h-6 rounded-md flex items-center justify-center transition-all ${t.status === 'IN_PROGRESS' ? 'bg-amber-500 text-white shadow-sm' : 'text-[#94a3b8] hover:bg-white hover:text-amber-500'}`}
-                                >
-                                  <Clock className="w-3.5 h-3.5" />
-                                </button>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleStatusChange(t.id, 'RESOLVED'); }}
-                                  title="Mark Resolved"
-                                  className={`w-6 h-6 rounded-md flex items-center justify-center transition-all ${t.status === 'RESOLVED' ? 'bg-emerald-500 text-white shadow-sm' : 'text-[#94a3b8] hover:bg-white hover:text-emerald-500'}`}
-                                >
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleStatusChange(t.id, 'ON_HOLD'); }}
-                                  title="Mark On Hold"
-                                  className={`w-6 h-6 rounded-md flex items-center justify-center transition-all ${t.status === 'ON_HOLD' ? 'bg-gray-500 text-white shadow-sm' : 'text-[#94a3b8] hover:bg-white hover:text-gray-500'}`}
-                                >
-                                  <Filter className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
+                              <QuickTicketActions
+                                ticket={t}
+                                allUsers={allUsers}
+                                currentUser={user!}
+                                onStatusChange={handleStatusChange}
+                                onAssignAgent={handleAssignAgent}
+                              />
                             )}
                             {t.isEscalated && (
                               <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-100 px-2 py-1 rounded-lg">
@@ -2159,19 +2135,31 @@ export default function App() {
                     </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {allUsers.filter(u => u.role !== 'CUSTOMER').map(u => (
-                      <div key={u.id} className="p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] relative group">
-                        <div className="flex items-center gap-3">
-                          <div className="relative">
-                            <img src={u.avatar} className="w-12 h-12 rounded-xl shadow-sm border border-white" alt={u.name} />
-                            <div className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm ${
-                              u.status === 'AVAILABLE' ? 'bg-emerald-500' :
-                              u.status === 'ON_BREAK' ? 'bg-amber-500' : 'bg-gray-400'
-                            }`} />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-[#0f172a]">{u.name}</p>
-                            <p className="text-[10px] text-[#64748b] font-medium mb-1">{u.role}</p>
+                    {allUsers.filter(u => u.role !== 'CUSTOMER').map(u => {
+                      const activeTicketCount = tickets.filter(t => t.agentId === u.id && !['RESOLVED', 'CLOSED'].includes(t.status)).length;
+                      const hasHighWorkload = activeTicketCount > 5;
+                      
+                      return (
+                        <div key={u.id} className="p-4 bg-[#f8fafc] rounded-xl border border-[#e2e8f0] relative group">
+                          <div className="flex items-center gap-3">
+                            <div className="relative">
+                              <img src={u.avatar} className="w-12 h-12 rounded-xl shadow-sm border border-white" alt={u.name} referrerPolicy="no-referrer" />
+                              <div className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm ${
+                                u.status === 'AVAILABLE' ? 'bg-emerald-500' :
+                                u.status === 'ON_BREAK' ? 'bg-amber-500' : 'bg-gray-400'
+                              }`} />
+                              {hasHighWorkload && (
+                                <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full border-2 border-white shadow-sm animate-pulse" title="High Workload Warning (> 5 active tickets)" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold text-[#0f172a]">{u.name}</p>
+                                {hasHighWorkload && (
+                                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.4)]" title="High Workload Warning" />
+                                )}
+                              </div>
+                              <p className="text-[10px] text-[#64748b] font-medium mb-1">{u.role}</p>
                             <div className="flex items-center gap-1.5">
                               <span className={`w-1.5 h-1.5 rounded-full ${
                                 u.status === 'AVAILABLE' ? 'bg-emerald-500' :
@@ -2195,11 +2183,12 @@ export default function App() {
                           </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-              </motion.div>
-            )}
+              </div>
+            </motion.div>
+          )}
 
             {view === 'SECURITY' && user.role === 'ADMIN' && (
               <SecurityView 
